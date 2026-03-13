@@ -1,0 +1,231 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-tw">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>example for AppPLNPolylineSetLineWidth</title>
+
+    <!-- @babel/polyfill -->
+    <script
+        nomodule
+        src="https://cdn.jsdelivr.net/npm/@babel/polyfill/dist/polyfill.min.js"
+    ></script>
+
+    <!-- vue -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.min.js"></script>
+
+    <!-- extractHtml已自動添加@babel/polyfill與vue -->
+
+    <!-- maplibre-gl已包入 -->
+    <script
+        _src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.js"
+    ></script>
+    <link
+        rel="stylesheet"
+        _href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.css"
+    />
+
+    <!-- w-maplibregl-vue -->
+    <script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.0/dist/w-maplibregl-vue.umd.js"></script>
+
+    <!-- lodash -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash@latest/lodash.min.js"></script>
+
+    <!-- wsemi -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/wsemi@latest/dist/wsemi.umd.min.js"
+    ></script>
+
+    <!-- w-gis -->
+    <script _src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/w-gis.umd.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/interp2.wk.umd.js"
+    ></script>
+
+    <!-- data -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-demores@latest/res/data/dataRain.js"
+    ></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-demores@latest/res/data/dataRainClip.js"
+    ></script>
+
+    <!-- w-jsonview-tree -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-jsonview-tree@latest/dist/w-jsonview-tree.umd.js"
+    ></script>
+    <script>
+  let jv = window["w-jsonview-tree"];
+    </script>
+
+    <style>
+  .item-link {
+    display: inline-block;
+    margin: 10px 10px 0px 0px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    color: #fff;
+    background-color: #443a65;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .bkh {
+    /* 寬 */
+    padding: 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkh {
+      padding: 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkh {
+      padding: 5px;
+    }
+  }
+  .bkp {
+    /* 寬 */
+    padding: 0px 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkp {
+      padding: 0px 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkp {
+      padding: 0px 5px;
+    }
+  }
+    </style>
+</head>
+<body
+    style="font-family:'Microsoft JhengHei','Avenir','Helvetica'; padding:0px; margin:0px;"
+>
+    <div id="app" class="bkh" style>
+        <div class="bkh">
+            <div style="font-size:1.5rem;">polylineSet.lineWidth</div>
+            <a
+                href="//yuda-lyu.github.io/w-maplibregl-vue/examples/ex-AppPLNPolylineSetLineWidth.html"
+                target="_blank"
+                class="item-link"
+            >example</a>
+            <a
+                href="//github.com/yuda-lyu/w-maplibregl-vue/blob/master/docs/examples/ex-AppPLNPolylineSetLineWidth.html"
+                target="_blank"
+                class="item-link"
+            >code</a>
+        </div>
+
+        <div class="bkp">
+            <div style="display:flex; padding-bottom:40px; overflow-x:auto;">
+                <div style="position:relative;">
+                    <w-maplibregl-vue
+                        style="width:800px; height:500px;"
+                        :opt="opt"
+                    ></w-maplibregl-vue>
+                </div>
+
+                <div style="width:600px; min-width:600px; padding:0px 20px;">
+                    <div style="border:1px solid #ddd;">
+                        <div
+                            style="padding-left:5px; overflow-y:auto; height:500px;"
+                        >
+                            <div id="optjson" style="font-size:10pt;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+  //install
+  Vue.component("w-maplibregl-vue", window["w-maplibregl-vue"]);
+
+  //initialize
+  new Vue({
+    el: "#app",
+
+    data: function() {
+      return {
+        opt: {
+          center: [25, 121.58],
+          zoom: 9,
+          polylineSets: [
+            {
+              title: "polylineSet A",
+              msg: "msg from polylineSet A",
+              latLngs: [
+                [
+                  //add p1
+                  [24.96, 121.41],
+                  [25.11, 121.47],
+                  [25.06, 121.69],
+                  [24.99, 121.61],
+                  [24.95, 121.53],
+                  [24.96, 121.41]
+                ],
+                [
+                  //add p2
+                  [24.92, 121.6],
+                  [25.045, 121.75],
+                  [24.99, 121.79],
+                  [24.93, 121.74],
+                  [24.92, 121.6]
+                ]
+              ],
+              lineWidth: 1,
+              visible: true
+            },
+            {
+              title: "polylineSet B",
+              msg: "msg from polylineSet B",
+              latLngs: [
+                [
+                  //add p3
+                  [24.971, 121.372],
+                  [24.976, 121.434],
+                  [24.937, 121.473],
+                  [24.918, 121.418],
+                  [24.971, 121.372]
+                ],
+                [
+                  //add p4
+                  [24.9, 121.14],
+                  [24.97, 121.09],
+                  [25.05, 121.177],
+                  [24.95, 121.32],
+                  [24.9, 121.14]
+                ]
+              ],
+              visible: false
+            }
+          ]
+        },
+        action: []
+      };
+    },
+    mounted: function() {
+      let vo = this;
+      vo.showOptJson();
+    },
+    computed: {},
+    methods: {
+      showOptJson: function() {
+        let vo = this;
+        jv(vo.opt, document.querySelector("#optjson"), { expanded: true });
+      }
+    }
+  });
+    </script>
+</body>
+</html>
