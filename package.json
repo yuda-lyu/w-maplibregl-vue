@@ -1,6 +1,6 @@
 {
   "name": "w-maplibregl-vue",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "dist/w-maplibregl-vue.umd.js",
   "dependencies": {
     "lodash-es": "^4.17.23",
