@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>js/layerVisibility.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#applyBaseMaps">applyBaseMaps</a></li><li><a href="global.html#applyProjection">applyProjection</a></li><li><a href="global.html#applyTerrain">applyTerrain</a></li><li><a href="global.html#buildContourLegend">buildContourLegend</a></li><li><a href="global.html#buildItemsList">buildItemsList</a></li><li><a href="global.html#buildPanelStyle">buildPanelStyle</a></li><li><a href="global.html#buildPolygonGeometry">buildPolygonGeometry</a></li><li><a href="global.html#calcPanToCenter">calcPanToCenter</a></li><li><a href="global.html#calcPolygonCenter">calcPolygonCenter</a></li><li><a href="global.html#calcPolylineCenter">calcPolylineCenter</a></li><li><a href="global.html#clearTrackedByPrefix">clearTrackedByPrefix</a></li><li><a href="global.html#clearTrackedMarkersByPrefix">clearTrackedMarkersByPrefix</a></li><li><a href="global.html#computeBasicOpt">computeBasicOpt</a></li><li><a href="global.html#computeClusterOpts">computeClusterOpts</a></li><li><a href="global.html#computePanelBaseMaps">computePanelBaseMaps</a></li><li><a href="global.html#computePanelCompass3d">computePanelCompass3d</a></li><li><a href="global.html#computePanelCompassRose">computePanelCompassRose</a></li><li><a href="global.html#computePanelItems">computePanelItems</a></li><li><a href="global.html#computePanelLabels">computePanelLabels</a></li><li><a href="global.html#computePanelLegends">computePanelLegends</a></li><li><a href="global.html#computePanelScale">computePanelScale</a></li><li><a href="global.html#computePanelZoom">computePanelZoom</a></li><li><a href="global.html#countVisible">countVisible</a></li><li><a href="global.html#createDirectionalPopup">createDirectionalPopup</a></li><li><a href="global.html#createMap">createMap</a></li><li><a href="global.html#findPointById">findPointById</a></li><li><a href="global.html#getContourColor">getContourColor</a></li><li><a href="global.html#getMapObject">getMapObject</a></li><li><a href="global.html#pointInRing">pointInRing</a></li><li><a href="global.html#recheckSinglePopupDir">recheckSinglePopupDir</a></li><li><a href="global.html#registerIconImage">registerIconImage</a></li><li><a href="global.html#renderContourSets">renderContourSets</a></li><li><a href="global.html#renderGeojsonSets">renderGeojsonSets</a></li><li><a href="global.html#renderImageSets">renderImageSets</a></li><li><a href="global.html#renderPointSets">renderPointSets</a></li><li><a href="global.html#renderPolygonSets">renderPolygonSets</a></li><li><a href="global.html#renderPolylineSets">renderPolylineSets</a></li><li><a href="global.html#resolveFeatureById">resolveFeatureById</a></li><li><a href="global.html#setOverlayOpacity">setOverlayOpacity</a></li><li><a href="global.html#switchBaseMap">switchBaseMap</a></li><li><a href="global.html#toggleOverlayVisible">toggleOverlayVisible</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">js/layerVisibility.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * layerVisibility.mjs
+ * 圖層可見性管理：tracked 清理、items 列表生成、可見數量計算
+ */
+import each from 'lodash-es/each.js'
+import filter from 'lodash-es/filter.js'
+import sortBy from 'lodash-es/sortBy.js'
+import cloneDeep from 'lodash-es/cloneDeep.js'
+import isNumber from 'lodash-es/isNumber.js'
+
+
+/**
+ * 清除以指定前綴開頭的 layer 與 source
+ * @param {Object} map - MapLibre 地圖實例
+ * @param {String} prefix - 前綴字串
+ * @param {Array} trackedLayerIds - 目前追蹤的 layer ID 陣列
+ * @param {Array} trackedSourceIds - 目前追蹤的 source ID 陣列
+ * @returns {{ layerIds: Array, sourceIds: Array }} 更新後的追蹤陣列
+ */
+export function clearTrackedByPrefix(map, prefix, trackedLayerIds, trackedSourceIds) {
+    if (!map) return { layerIds: trackedLayerIds, sourceIds: trackedSourceIds }
+    let rl = []; let rs = []
+    each(trackedLayerIds, (id) => {
+        id.startsWith(prefix) ? (map.getLayer(id) &amp;&amp; map.removeLayer(id)) : rl.push(id)
+    })
+    each(trackedSourceIds, (id) => {
+        id.startsWith(prefix) ? (map.getSource(id) &amp;&amp; map.removeSource(id)) : rs.push(id)
+    })
+    return { layerIds: rl, sourceIds: rs }
+}
+
+
+/**
+ * 清除以指定前綴開頭的 DOM markers
+ * @param {String} prefix - 前綴字串（對應 marker._prefix）
+ * @param {Array} trackedMarkers - 目前追蹤的 marker 陣列
+ * @returns {Array} 更新後的 marker 陣列
+ */
+export function clearTrackedMarkersByPrefix(prefix, trackedMarkers) {
+    let remain = []
+    each(trackedMarkers, (m) => {
+        m._prefix === prefix ? m.remove() : remain.push(m)
+    })
+    return remain
+}
+
+
+/**
+ * 建立統一的圖層列表（供圖層顯隱面板使用）
+ * @param {Array} imageSets
+ * @param {Array} pointSets
+ * @param {Array} polylineSets
+ * @param {Array} polygonSets
+ * @param {Array} geojsonSets
+ * @param {Array} contourSets
+ * @returns {Array} items - [{ name, msg, order, visible, updatePath }]
+ */
+export function buildItemsList(imageSets, pointSets, polylineSets, polygonSets, geojsonSets, contourSets) {
+    let items = []
+    let add = (n, m, o, v, p) => {
+        items.push({ name: n, msg: m, order: o, visible: v, updatePath: p })
+    }
+    each(imageSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `imageSets.${k}.visible`) })
+    each(pointSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `pointSets.${k}.visible`) })
+    each(polylineSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `polylineSets.${k}.visible`) })
+    each(polygonSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `polygonSets.${k}.visible`) })
+    each(geojsonSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `geojsonSets.${k}.visible`) })
+    each(contourSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `contourSets.${k}.visible`) })
+    let ord = sortBy(filter(items, (v) => isNumber(v.order)), 'order')
+    let rest = filter(items, (v) => !isNumber(v.order))
+    return cloneDeep([...ord, ...rest])
+}
+
+
+/**
+ * 計算可見圖層數量（純函式）
+ * @param {Array} arr - 含 visible 屬性的陣列
+ * @returns {Number}
+ */
+export function countVisible(arr) {
+    let i = 0
+    each(arr, (v) => { if (v.visible) i++ })
+    return i
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Mar 15 2026 22:48:39 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>
