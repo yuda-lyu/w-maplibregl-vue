@@ -55,36 +55,78 @@
 
             &lt;!-- 羅盤 -->
             &lt;div v-if="panelCompassRose.show &amp;&amp; panelCompassRose.position===corner"
-                :style="{ padding: panelCompassRose.withPanel ? '3px' : '0', background: panelCompassRose.withPanel ? panelBackgroundColor : 'transparent', borderRadius: '5px' }">
+                :style="{ order: getPanelOrder('panelCompassRose', corner), padding: panelCompassRose.withPanel ? '3px' : '0', background: panelCompassRose.withPanel ? panelBackgroundColor : 'transparent', borderRadius: '5px' }">
                 &lt;img :src="useIconCompassRose" :style="{ width: panelCompassRose.size+'px', height: panelCompassRose.size+'px', display:'block' }" />
             &lt;/div>
 
+            &lt;!-- 3D 指北針（含視角傾斜效果，點擊恢復 2D 正北） -->
+            &lt;div v-if="panelCompass3d.show &amp;&amp; panelCompass3d.position===corner"
+                @click="resetTo2d"
+                :title="currentPitch > 0 ? 'Click to reset 2D north-up view' : 'Click to face north'"
+                :style="{ order: getPanelOrder('panelCompass3d', corner), cursor:'pointer', display:'inline-block', lineHeight:'0' }">
+                &lt;div :style="compass3dDiscStyle">
+                    &lt;svg :width="panelCompass3d.size" :height="panelCompass3d.size" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+                        &lt;!-- 外圓背景 -->
+                        &lt;circle cx="22" cy="22" r="21" fill="rgba(20,20,20,0.78)" stroke="rgba(255,255,255,1)" stroke-width="1"/>
+                        &lt;!-- 旋轉群組：指針依 bearing 旋轉 -->
+                        &lt;g :transform="`rotate(${-currentBearing}, 22, 22)`">
+                            &lt;!-- 北方指針（紅色） -->
+                            &lt;polygon points="22,4 18.5,22 22,19.5 25.5,22" fill="#e84040"/>
+                            &lt;!-- 南方指針（灰色） -->
+                            &lt;polygon points="22,40 18.5,22 22,24.5 25.5,22" fill="#999999"/>
+                            &lt;!-- 東西刻度短線 -->
+                            &lt;line x1="4" y1="22" x2="7" y2="22" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+                            &lt;line x1="37" y1="22" x2="40" y2="22" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+                        &lt;/g>
+                        &lt;!-- 中心圓點 -->
+                        &lt;circle cx="22" cy="22" r="2.2" fill="rgba(255,255,255,0.85)"/>
+                    &lt;/svg>
+                &lt;/div>
+            &lt;/div>
+
             &lt;!-- 底圖選擇 -->
-            &lt;div v-if="panelBaseMaps.show &amp;&amp; panelBaseMaps.position===corner" class="clsPanel" :style="{ background: panelBackgroundColor }">
+            &lt;div v-if="panelBaseMaps.show &amp;&amp; panelBaseMaps.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelBaseMaps', corner), background: panelBackgroundColor }">
                 &lt;div :style="{ overflow:'auto', ...panelBaseMaps.style }" @wheel="handleWheel($event, panelBaseMaps)">
                     &lt;div v-for="(bm, kbm) in panelBaseMaps.baseMaps" :key="'bm:'+kbm" style="padding:2px 0;">
-                        &lt;label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
-                            &lt;input type="radio" :name="'bmr_'+_uid" :checked="bm.visible" @change="switchBaseMap(kbm)" />
-                            &lt;span>{{ bm.name }}&lt;/span>
-                        &lt;/label>
+                        &lt;!-- 底圖（colorShade 非空）：radio 單選 -->
+                        &lt;template v-if="bm.colorShade !== ''">
+                            &lt;label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
+                                &lt;input type="radio" :name="'bmr_'+_uid" :checked="bm.visible" @change="switchBaseMap(kbm)" />
+                                &lt;span>{{ bm.name }}&lt;/span>
+                            &lt;/label>
+                        &lt;/template>
+                        &lt;!-- 疊加圖層（colorShade 空字串）：checkbox 多選 + opacity 滑桿 -->
+                        &lt;template v-else>
+                            &lt;label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
+                                &lt;input type="checkbox" :checked="bm.visible" @change="toggleOverlayVisible(kbm)" />
+                                &lt;span>{{ bm.name }}&lt;/span>
+                            &lt;/label>
+                            &lt;div style="display:flex; align-items:center; gap:4px; padding-left:20px; padding-top:2px; font-size:0.75rem;">
+                                &lt;input type="range" min="0" max="1" step="0.01" :value="bm.opacity != null ? bm.opacity : 1" :disabled="!bm.visible" @input="setOverlayOpacity(kbm, $event.target.value)" style="width:70px;" />
+                                &lt;span>{{ Math.round((bm.opacity != null ? bm.opacity : 1) * 100) }}%&lt;/span>
+                            &lt;/div>
+                        &lt;/template>
                     &lt;/div>
                 &lt;/div>
             &lt;/div>
 
             &lt;!-- 圖層顯隱 -->
-            &lt;div v-if="panelItems.show &amp;&amp; items.length>0 &amp;&amp; panelItems.position===corner" class="clsPanel" :style="{ background: panelBackgroundColor }">
+            &lt;div v-if="panelItems.show &amp;&amp; items.length>0 &amp;&amp; panelItems.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelItems', corner), background: panelBackgroundColor }">
                 &lt;div :style="{ overflow:'auto', ...panelItems.style }" @wheel="handleWheel($event, panelItems)">
                     &lt;div v-for="(item, ki) in items" :key="'item:'+ki" style="padding:2px 0;">
                         &lt;label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
                             &lt;input type="checkbox" :checked="item.visible" @change="toggleItemVisible(ki)" />
-                            &lt;span>{{ item.name }}&lt;/span>
+                            &lt;span style="display:inline-flex; flex-direction:column; gap:1px;">
+                                &lt;span>{{ item.name }}&lt;/span>
+                                &lt;span v-if="item.msg" style="font-size:0.7rem; color:#888; font-weight:normal; white-space:pre-wrap;">{{ item.msg }}&lt;/span>
+                            &lt;/span>
                         &lt;/label>
                     &lt;/div>
                 &lt;/div>
             &lt;/div>
 
             &lt;!-- 地圖資訊（經緯度/縮放） -->
-            &lt;div v-if="panelLabels.show &amp;&amp; panelLabels.position===corner" class="clsPanel" :style="{ background: panelBackgroundColor }">
+            &lt;div v-if="panelLabels.show &amp;&amp; panelLabels.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelLabels', corner), background: panelBackgroundColor }">
                 &lt;div :style="{ overflow:'auto', ...panelLabels.style }">
                     &lt;template v-if="panelLabels.title !== ''">
                         &lt;div style="font-size:1.1rem; font-weight:bold; text-align:center;">{{ panelLabels.title }}&lt;/div>
@@ -93,21 +135,21 @@
                     &lt;table>&lt;tbody>
                         &lt;tr v-for="(u, ku) in panelLabels.useItems" :key="ku">
                             &lt;td style="text-align:right;">{{ panelLabels[u] }}&lt;/td>&lt;td> : &lt;/td>
-                            &lt;td>{{ u==='lng'||u==='lat' ? showLoc[u] : u==='zoom' ? Math.round(currentZoom*1e5)/1e5 : '' }}&lt;/td>
+                            &lt;td>{{ u==='lng'||u==='lat' ? showLoc[u] : u==='zoom' ? Math.max(0, Math.round(currentZoom*1e5)/1e5) : '' }}&lt;/td>
                         &lt;/tr>
                     &lt;/tbody>&lt;/table>
                 &lt;/div>
             &lt;/div>
 
             &lt;!-- 縮放按鈕 -->
-            &lt;div v-if="panelZoom.show &amp;&amp; panelZoom.position===corner" class="clsPanel" style="padding:0;">
+            &lt;div v-if="panelZoom.show &amp;&amp; panelZoom.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelZoom', corner), padding: '0' }">
                 &lt;button class="clsZoomBtn" @click="zoomIn" title="放大">+&lt;/button>
                 &lt;div style="border-top:1px solid #ccc;">&lt;/div>
                 &lt;button class="clsZoomBtn" @click="zoomOut" title="縮小">−&lt;/button>
             &lt;/div>
 
             &lt;!-- 比例尺 -->
-            &lt;div v-if="panelScale.show &amp;&amp; panelScale.position===corner" class="clsPanel clsScale" :style="{ background: 'rgba(0,0,0,0.6)', color:'#fff' }">
+            &lt;div v-if="panelScale.show &amp;&amp; panelScale.position===corner" class="clsPanel clsScale" :style="{ order: getPanelOrder('panelScale', corner), background: 'rgba(0,0,0,0.6)', color:'#fff' }">
                 &lt;div style="display:flex; align-items:center; gap:4px;">
                     &lt;div style="width:80px; height:3px; background:#fff; border:1px solid #fff;">&lt;/div>
                     &lt;span>{{ scaleText }}&lt;/span>
@@ -115,7 +157,7 @@
             &lt;/div>
 
             &lt;!-- 圖例區（等值線用） -->
-            &lt;div v-if="panelLegends.show &amp;&amp; countVisible(contourSets)>0 &amp;&amp; panelLegends.position===corner" class="clsPanel" :style="{ background: panelBackgroundColor }">
+            &lt;div v-if="panelLegends.show &amp;&amp; countVisible(contourSets)>0 &amp;&amp; panelLegends.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelLegends', corner), background: panelBackgroundColor }">
                 &lt;div :style="{ display:'flex', alignItems:'flex-start', overflow:'auto', ...panelLegends.style }" @wheel="handleWheel($event, panelLegends)">
                     &lt;template v-for="(contourSet, kcontourSet) in contourSets">
                         &lt;div style="white-space:nowrap;" :key="'contourSet:'+kcontourSet" v-if="contourSet.visible">
@@ -272,7 +314,11 @@ import domResize from 'w-component-vue/src/js/domResize.mjs'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import defBaseMaps from '../defBaseMaps.mjs'
+import defTerrainMap from '../defTerrainMap.mjs'
 import uiRes from '../uiRes.mjs'
+
+
+const defPanelsOrder = ['panelBaseMaps', 'panelLabels', 'panelScale', 'panelCompassRose', 'panelCompass3d', 'panelZoom', 'panelItems', 'panelLegends']
 
 
 export default {
@@ -300,6 +346,13 @@ export default {
             wats: [],
             currentZoom: 7,
             currentCenter: [23.5, 121.1],
+            currentPitch: 0,
+            currentBearing: 0,
+            mapLoaded: false,
+            projection: '',
+            panelsOrder: [...defPanelsOrder],
+            terrainMap: null,
+            terrainMapTemp: null,
 
             // 面板設定
             panelBackgroundColor: 'rgba(255,255,255,0.95)',
@@ -307,6 +360,8 @@ export default {
             panelBaseMapsTemp: {},
             panelCompassRose: { show: false, position: 'topright', size: 120, withPanel: false, iconSrc: null, iconSrcLight: uiRes.iconCompassRoseLight, iconSrcDark: uiRes.iconCompassRoseDark },
             panelCompassRoseTemp: {},
+            panelCompass3d: { show: true, position: 'topright', size: 44 },
+            panelCompass3dTemp: {},
             panelLabels: { show: true, position: 'topright', useItems: ['lng', 'lat', 'zoom'], lng: 'Longitude', lat: 'Latitude', zoom: 'Zoom', title: '', style: {} },
             panelLabelsTemp: {},
             panelItems: { show: true, position: 'topleft', stopWheel: false, style: {} },
@@ -434,6 +489,16 @@ export default {
             let d = mpp * 80
             return d >= 1000 ? Math.round(d / 1000) + ' km' : Math.round(d) + ' m'
         },
+        /** 3D指北針：模擬俯視角傾斜效果的 CSS transform */
+        compass3dDiscStyle() {
+            let tilt = Math.min(this.currentPitch * 0.72, 52)
+            return {
+                display: 'inline-block',
+                transform: `perspective(160px) rotateX(${tilt}deg)`,
+                transition: 'transform 0.08s linear',
+                transformOrigin: 'center center',
+            }
+        },
     },
     methods: {
 
@@ -451,14 +516,23 @@ export default {
             // 不使用 MapLibre 內建 control，全部由自訂面板管理
             vo.map = new maplibregl.Map({
                 container: vo.$refs.mapContainer,
-                style: { version: 8, sources: {}, glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf', layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f0f0f0' } }] },
+                style: {
+                    version: 8,
+                    sources: {},
+                    // glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+                    layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f0f0f0' } }],
+                },
                 center: [center[1], center[0]],
                 zoom,
                 attributionControl: false,
+                antialias: true, //讓 3D 地形邊緣更平滑（須付出輕微效能成本，但 3D 模式必要）
             })
 
             vo.map.on('load', () => {
+                vo.mapLoaded = true
+                vo.applyProjection()
                 vo.applyBaseMaps()
+                vo.applyTerrain()
                 // 確保所有資料在 map load 時已處理（debounce 可能尚未觸發）
                 vo.ensureDataProcessed()
                 vo.applyAllDataLayers()
@@ -469,6 +543,8 @@ export default {
             vo.map.on('zoomend', () => {
                 // let z = Math.round(vo.map.getZoom()); vo.opt.zoom = z; vo.currentZoom = z
                 let z = (vo.map.getZoom()); vo.opt.zoom = z; vo.currentZoom = z
+                // auto projection：zoom 跨過閾值時自動切換
+                if (vo.projection === '') vo.applyProjection()
             })
             vo.map.on('moveend', () => {
                 let c = vo.map.getCenter(); let nc = [c.lat, c.lng]
@@ -479,6 +555,13 @@ export default {
             vo.map.on('move', () => {
                 vo.recheckPopupDirections()
             })
+            // 即時更新 pitch / bearing（供 panelCompass3d 使用）
+            vo.map.on('pitch', () => {
+                vo.currentPitch = vo.map.getPitch()
+            })
+            vo.map.on('rotate', () => {
+                vo.currentBearing = vo.map.getBearing()
+            })
             vo.currentZoom = zoom; vo.currentCenter = center
         },
 
@@ -486,16 +569,72 @@ export default {
             if (this.map) this.map.resize()
         },
 
+        // ===== 面板排序 =====
+
+        getPanelOrder(panelName, corner) {
+            let vo = this
+            let order = vo.panelsOrder
+            let idx = order.indexOf(panelName)
+            if (corner.startsWith('bottom')) {
+                // bottom 角：order 越大越靠近角落（flex 最後一個 item 最接近 bottom）
+                return idx &lt; 0 ? -1 : (order.length - idx)
+            }
+            // top 角：order 越小越靠近角落（flex 第一個 item 最接近 top）
+            return idx &lt; 0 ? order.length : idx
+        },
+
+        // ===== 投影 =====
+
+        applyProjection() {
+            let vo = this
+            if (!vo.map || !vo.mapLoaded) return
+            let target
+            if (vo.projection === '') {
+                // auto：zoom &lt;= 8 用 globe，zoom > 8 用 mercator
+                target = vo.map.getZoom() &lt;= 8 ? 'globe' : 'mercator'
+            }
+            else {
+                target = vo.projection
+            }
+            try {
+                vo.map.setProjection({ type: target })
+            }
+            catch (e) {
+                console.warn('[WMaplibreglVue] setProjection error:', e)
+            }
+        },
+
         // ===== 底圖 =====
 
         applyBaseMaps() {
             let vo = this
-            if (!vo.map || !vo.map.isStyleLoaded()) return
+            if (!vo.map || !vo.mapLoaded) return
             let baseMaps = get(vo, 'panelBaseMaps.baseMaps', [])
-            each(baseMaps, (bm, k) => {
+            let addBaseMapLayer = (bm, k) => {
                 let srcId = `basemap-src-${k}`; let layerId = `basemap-layer-${k}`
                 if (vo.map.getLayer(layerId)) vo.map.removeLayer(layerId)
                 if (vo.map.getSource(srcId)) vo.map.removeSource(srcId)
+                if (bm.type === 'vector') {
+                    let u = bm.url; if (u.startsWith('//')) u = 'https:' + u
+                    vo.map.addSource(srcId, { type: 'vector', url: u })
+                    let layerType = bm.layerType || 'fill'
+                    let sourceLayer = bm.layer || ''
+                    let op = bm.opacity != null ? bm.opacity : 0.8
+                    let paint = {}
+                    if (layerType === 'fill-extrusion') {
+                        paint = {
+                            'fill-extrusion-color': ['coalesce', ['get', 'colour'], '#aaaaaa'],
+                            'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['coalesce', ['get', 'render_height'], ['get', 'height'], 0]],
+                            'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0]],
+                            'fill-extrusion-opacity': op,
+                        }
+                    }
+                    else if (layerType === 'fill') {
+                        paint = { 'fill-color': '#aaaaaa', 'fill-opacity': op }
+                    }
+                    vo.map.addLayer({ 'id': layerId, 'type': layerType, 'source': srcId, 'source-layer': sourceLayer, paint, 'layout': { visibility: bm.visible ? 'visible' : 'none' } })
+                    return
+                }
                 let tiles = []
                 if (bm.type === 'wms') {
                     let u = bm.url; if (!u.includes('?')) u += '?'
@@ -507,18 +646,144 @@ export default {
                     tiles = u.includes('{s}') ? ['a', 'b', 'c'].map((s) => u.replace('{s}', s)) : [u]
                     tiles = tiles.map((t) => t.startsWith('//') ? 'https:' + t : t)
                 }
+                let op = bm.opacity != null ? bm.opacity : 1
                 vo.map.addSource(srcId, { type: 'raster', tiles, tileSize: 256 })
-                vo.map.addLayer({ id: layerId, type: 'raster', source: srcId, paint: { 'raster-opacity': bm.opacity || 1 }, layout: { visibility: bm.visible ? 'visible' : 'none' } })
+                vo.map.addLayer({ id: layerId, type: 'raster', source: srcId, paint: { 'raster-opacity': op }, layout: { visibility: bm.visible ? 'visible' : 'none' } })
+            }
+            // 第一輪：底圖（colorShade 非空），確保先渲染在下方
+            each(baseMaps, (bm, k) => {
+                if (isestr(bm.colorShade)) addBaseMapLayer(bm, k)
             })
+            // 第二輪：疊加圖層（colorShade 空字串），後渲染在底圖上方
+            each(baseMaps, (bm, k) => {
+                if (!isestr(bm.colorShade)) addBaseMapLayer(bm, k)
+            })
+        },
+
+        applyTerrain() {
+            let vo = this
+            if (!vo.map || !vo.mapLoaded) return
+
+            // 清除舊設定：先釋放 terrain，再移除 layer/source
+            try {
+                vo.map.setTerrain(null)
+            }
+            catch (e) {}
+            if (vo.map.getLayer('terrain-hillshade')) vo.map.removeLayer('terrain-hillshade')
+            if (vo.map.getSource('terrain-hillshade-src')) vo.map.removeSource('terrain-hillshade-src')
+            if (vo.map.getSource('terrain-src')) vo.map.removeSource('terrain-src')
+
+            let tm = vo.terrainMap
+            if (!isobj(tm)) return
+            let tsrc = get(tm, 'terrainSource', null)
+            if (!isobj(tsrc) || !isestr(tsrc.url)) return
+
+            // 添加 raster-dem terrain source
+            let tu = tsrc.url; if (tu.startsWith('//')) tu = 'https:' + tu
+            let terrainSrcSpec = {
+                type: 'raster-dem',
+                tiles: [tu],
+                tileSize: tsrc.tileSize || 256,
+                encoding: tsrc.encoding || 'terrarium',
+            }
+            if (isnum(tsrc.maxzoom)) terrainSrcSpec.maxzoom = parseInt(tsrc.maxzoom)
+            try {
+                vo.map.addSource('terrain-src', terrainSrcSpec)
+            }
+            catch (e) {
+                console.error('[WMaplibreglVue] applyTerrain addSource error:', e)
+                return
+            }
+            // 啟用 3D 地形高程
+            try {
+                vo.map.setTerrain({ source: 'terrain-src', exaggeration: isnum(tm.exaggeration) ? cdbl(tm.exaggeration) : 1.5 })
+                // console.log('[WMaplibreglVue] setTerrain OK, tiles:', tu)
+            }
+            catch (e) {
+                console.error('[WMaplibreglVue] applyTerrain setTerrain error:', e)
+            }
+
+            // 添加 hillshade（山坡陰影）
+            let hsrc = get(tm, 'hillshadeSource', null)
+            if (isobj(hsrc) &amp;&amp; isestr(hsrc.url)) {
+                let hu = hsrc.url; if (hu.startsWith('//')) hu = 'https:' + hu
+                // 若 hillshade URL 與 terrain URL 相同，共用 terrain-src 避免重複載入
+                let hillshadeSourceId = 'terrain-src'
+                if (hu !== tu) {
+                    let hillshadeSrcSpec = {
+                        type: 'raster-dem',
+                        tiles: [hu],
+                        tileSize: hsrc.tileSize || 256,
+                        encoding: hsrc.encoding || 'terrarium',
+                    }
+                    if (isnum(hsrc.maxzoom)) hillshadeSrcSpec.maxzoom = parseInt(hsrc.maxzoom)
+                    vo.map.addSource('terrain-hillshade-src', hillshadeSrcSpec)
+                    hillshadeSourceId = 'terrain-hillshade-src'
+                }
+                // 插入在第一個 data layer 之前，確保 hillshade 不覆蓋圖資
+                let insertBefore = null
+                for (let lid of vo.trackedLayerIds) {
+                    if (vo.map.getLayer(lid)) {
+                        insertBefore = lid; break
+                    }
+                }
+                let hillshadeSpec = {
+                    id: 'terrain-hillshade',
+                    type: 'hillshade',
+                    source: hillshadeSourceId,
+                    paint: {
+                        'hillshade-shadow-color': '#473B24',
+                        'hillshade-exaggeration': isnum(tm.hillshadeExaggeration) ? cdbl(tm.hillshadeExaggeration) : 0.5,
+                    },
+                }
+                if (insertBefore &amp;&amp; vo.map.getLayer(insertBefore)) {
+                    vo.map.addLayer(hillshadeSpec, insertBefore)
+                }
+                else {
+                    vo.map.addLayer(hillshadeSpec)
+                }
+            }
         },
 
         switchBaseMap(idx) {
             let vo = this
             each(vo.panelBaseMaps.baseMaps, (bm, k) => {
+                if (!isestr(bm.colorShade)) return // 不影響疊加圖層
                 bm.visible = (k === idx)
                 let id = `basemap-layer-${k}`
                 if (vo.map &amp;&amp; vo.map.getLayer(id)) vo.map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
             })
+            vo.$forceUpdate()
+        },
+
+        toggleOverlayVisible(idx) {
+            let vo = this
+            let bm = get(vo, `panelBaseMaps.baseMaps.${idx}`, null)
+            if (!bm) return
+            bm.visible = !bm.visible
+            let id = `basemap-layer-${idx}`
+            if (vo.map &amp;&amp; vo.map.getLayer(id)) vo.map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+            vo.$forceUpdate()
+        },
+
+        setOverlayOpacity(idx, val) {
+            let vo = this
+            let bm = get(vo, `panelBaseMaps.baseMaps.${idx}`, null)
+            if (!bm) return
+            bm.opacity = parseFloat(val)
+            let id = `basemap-layer-${idx}`
+            if (!vo.map || !vo.map.getLayer(id)) {
+                vo.$forceUpdate(); return
+            }
+            if (bm.type === 'vector') {
+                let lt = bm.layerType || 'fill'
+                if (lt === 'fill-extrusion') vo.map.setPaintProperty(id, 'fill-extrusion-opacity', bm.opacity)
+                else if (lt === 'line') vo.map.setPaintProperty(id, 'line-opacity', bm.opacity)
+                else vo.map.setPaintProperty(id, 'fill-opacity', bm.opacity)
+            }
+            else {
+                vo.map.setPaintProperty(id, 'raster-opacity', bm.opacity)
+            }
             vo.$forceUpdate()
         },
 
@@ -564,6 +829,7 @@ export default {
 
             vo.processPanelBaseMaps()
             vo.processPanelCompassRose()
+            vo.processPanelCompass3d()
             vo.processPanelLabels()
             vo.processPanelItems()
             vo.processPanelZoom()
@@ -618,10 +884,23 @@ export default {
             vo.clusterPointsLevelTextSizes = cpLevelTextSizes
             vo.clusterPointsLevelTextColors = cpLevelTextColors
             vo._prevClusterKey = newClusterKey
-            if (clusterChanged &amp;&amp; vo.map &amp;&amp; vo.map.isStyleLoaded()) {
+            if (clusterChanged &amp;&amp; vo.map &amp;&amp; vo.mapLoaded) {
                 vo.clearTrackedByPrefix('point-')
                 vo.clearTrackedMarkersByPrefix('point')
                 vo.renderPointSets()
+            }
+
+            // panelsOrder
+            let panelsOrder = get(vo, 'opt.panelsOrder', null)
+            if (!isarr(panelsOrder) || panelsOrder.length === 0) panelsOrder = defPanelsOrder
+            if (!isEqual(vo.panelsOrder, panelsOrder)) vo.panelsOrder = cloneDeep(panelsOrder)
+
+            // projection（load 後才能呼叫 setProjection，首次由 map.on('load') 處理）
+            let projection = get(vo, 'opt.projection', null)
+            if (!isstr(projection) || !['globe', 'mercator'].includes(projection)) projection = ''
+            if (vo.projection !== projection) {
+                vo.projection = projection
+                if (vo.map &amp;&amp; vo.mapLoaded) vo.applyProjection()
             }
 
             vo.changeItemsDebounce('changeOpt')
@@ -647,14 +926,22 @@ export default {
             }
             p = cloneDeep(p); p.style = vo.buildPanelStyle(p)
 
+            // terrainMap：優先取 opt.panelBaseMaps.terrainMap，否則用 defTerrainMap
+            let tm = get(p, 'terrainMap', null)
+            if (!isobj(tm)) tm = cloneDeep(defTerrainMap)
+            let terrainChanged = !isEqual(vo.terrainMapTemp, tm)
+            vo.terrainMapTemp = cloneDeep(tm)
+            vo.terrainMap = tm
+
             // 分離比較：僅底圖資料變更才重繪底圖，避免 show/position 變更導致閃爍
             let baseMapsChanged = !isEqual(vo.baseMapsDataTemp, p.baseMaps)
             vo.panelBaseMaps = p
             vo.panelBaseMapsTemp = cloneDeep(p)
             if (baseMapsChanged) {
                 vo.baseMapsDataTemp = cloneDeep(p.baseMaps)
-                if (vo.map &amp;&amp; vo.map.isStyleLoaded()) vo.applyBaseMaps()
+                if (vo.map &amp;&amp; vo.mapLoaded) vo.applyBaseMaps()
             }
+            if (terrainChanged &amp;&amp; vo.map &amp;&amp; vo.mapLoaded) vo.applyTerrain()
         },
 
         processPanelCompassRose() {
@@ -665,6 +952,21 @@ export default {
             if (!isEqual(vo.panelCompassRoseTemp, p)) {
                 vo.panelCompassRose = p; vo.panelCompassRoseTemp = cloneDeep(p)
             }
+        },
+
+        processPanelCompass3d() {
+            let vo = this
+            let def = { show: true, position: 'topright', size: 44 }
+            let p = get(vo, 'opt.panelCompass3d', null); if (!isobj(p)) p = {}
+            p = cloneDeep({ ...def, ...p })
+            if (!isEqual(vo.panelCompass3dTemp, p)) {
+                vo.panelCompass3d = p; vo.panelCompass3dTemp = cloneDeep(p)
+            }
+        },
+
+        resetTo2d() {
+            if (!this.map) return
+            this.map.easeTo({ pitch: 0, bearing: 0, duration: 400 })
         },
 
         processPanelLabels() {
@@ -779,7 +1081,7 @@ export default {
             vo.changeItemsDebounce('changePointSets')
             // 方案五：若 style 尚未載入完成，等待 idle 事件後再渲染（避免 renderPointSets 被跳過且無重試）
             if (vo.map) {
-                if (vo.map.isStyleLoaded()) {
+                if (vo.mapLoaded) {
                     vo.renderPointSets()
                 }
                 else {
@@ -1276,7 +1578,7 @@ export default {
                 let lw = get(pls, 'lineWidth', null); if (!isNumber(lw))lw = 3
                 return { id: `polylineSet-${k}`, ...pls, lineColor: lc, lineWidth: lw, funSetsClick: fc }
             })
-            vo.changeItemsDebounce('changePolylineSets'); if (vo.map &amp;&amp; vo.map.isStyleLoaded())vo.renderPolylineSets()
+            vo.changeItemsDebounce('changePolylineSets'); if (vo.map &amp;&amp; vo.mapLoaded)vo.renderPolylineSets()
         },
         /** 增量渲染折線（已存在的 source 用 setData 更新，避免閃爍） */
         renderPolylineSets() {
@@ -1347,7 +1649,7 @@ export default {
                 let fl = get(pg, 'fillColor', 'rgba(0,150,255,0.25)'); if (!isestr(fl))fl = 'rgba(0,150,255,0.25)'
                 return { id: `polygonSet-${k}`, ...pg, lineColor: lc, lineWidth: lw, fillColor: fl, funSetsClick: fc }
             })
-            vo.changeItemsDebounce('changePolygonSets'); if (vo.map &amp;&amp; vo.map.isStyleLoaded())vo.renderPolygonSets()
+            vo.changeItemsDebounce('changePolygonSets'); if (vo.map &amp;&amp; vo.mapLoaded)vo.renderPolygonSets()
         },
         /**
          * 點是否在環（ring）內部（Ray Casting 演算法）
@@ -1462,7 +1764,7 @@ export default {
                 let fl = get(gj, 'fillColor', 'rgba(0,150,255,0.25)'); if (!isestr(fl))fl = 'rgba(0,150,255,0.25)'
                 return { id: `geojsonSet-${k}`, ...gj, lineColor: lc, lineWidth: lw, fillColor: fl, funSetsClick: fc }
             })
-            vo.changeItemsDebounce('changeGeojsonSets'); if (vo.map &amp;&amp; vo.map.isStyleLoaded())vo.renderGeojsonSets()
+            vo.changeItemsDebounce('changeGeojsonSets'); if (vo.map &amp;&amp; vo.mapLoaded)vo.renderGeojsonSets()
         },
         /**
          * 增量渲染 GeoJSON（使用 splitAndProcGeoJSON 拆分幾何類型後分別渲染）
@@ -1568,7 +1870,7 @@ export default {
                 if (!isNumber(get(im, 'order', null)))im.order = null; if (!isbol(get(im, 'visible', null)))im.visible = false
                 return { id: `imageSet-${k}`, ...im }
             })
-            vo.changeItemsDebounce('changeImageSets'); if (vo.map &amp;&amp; vo.map.isStyleLoaded())vo.renderImageSets()
+            vo.changeItemsDebounce('changeImageSets'); if (vo.map &amp;&amp; vo.mapLoaded)vo.renderImageSets()
         },
         /** 增量渲染影像（已存在的 source 用 updateImage 更新，避免閃爍） */
         renderImageSets() {
@@ -1691,7 +1993,7 @@ export default {
             })
 
             vo.changeItemsDebounce('changeContourSets')
-            if (vo.map &amp;&amp; vo.map.isStyleLoaded()) vo.renderContourSets()
+            if (vo.map &amp;&amp; vo.mapLoaded) vo.renderContourSets()
         },
 
         /** 計算等值線色彩（based on gradient 內插） */
@@ -1997,7 +2299,7 @@ export default {
                 let setKey = item.updatePath.replace('.visible', '')
                 vo.closePopupByOwner(setKey)
             }
-            if (vo.map &amp;&amp; vo.map.isStyleLoaded())vo.applyAllDataLayers()
+            if (vo.map &amp;&amp; vo.mapLoaded)vo.applyAllDataLayers()
         },
 
         // ===== 公開方法 =====
@@ -2460,7 +2762,7 @@ export default {
             each(hiddenKeys, (setKey) => {
                 vo.closePopupByOwner(setKey)
             })
-            if (vo.map &amp;&amp; vo.map.isStyleLoaded())vo.applyAllDataLayers()
+            if (vo.map &amp;&amp; vo.mapLoaded)vo.applyAllDataLayers()
         },
     },
 }
@@ -2508,7 +2810,7 @@ export default {
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Fri Mar 13 2026 08:42:44 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Mar 15 2026 11:48:15 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
