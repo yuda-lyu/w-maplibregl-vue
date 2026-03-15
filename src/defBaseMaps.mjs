@@ -26,25 +26,45 @@ let defBaseMaps = [
         visible: false,
     },
 
-    //使用google.cn圖資
     {
-        name: 'GoogleStreets',
-        url: '//www.google.cn/maps/vt?lyrs=m@189&gl=cn&x={x}&y={y}&z={z}',
-        colorShade: 'light',
-        opacity: 1,
-        visible: false,
-    },
-    {
-        name: 'GoogleSatellite',
-        url: '//www.google.cn/maps/vt?lyrs=s@189&gl=cn&x={x}&y={y}&z={z}',
+        name: 'EsriWorldImagery',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         colorShade: 'dark',
         opacity: 1,
         visible: false,
+        attribution: 'Tiles &copy; Esri'
     },
+
+    // //使用google.cn圖資, maplibre-gl嚴格限制cors無法使用
+    // {
+    //     name: 'GoogleStreets',
+    //     url: '//www.google.cn/maps/vt?lyrs=m@189&gl=cn&x={x}&y={y}&z={z}',
+    //     colorShade: 'light',
+    //     opacity: 1,
+    //     visible: false,
+    // },
+    // {
+    //     name: 'GoogleSatellite',
+    //     url: '//www.google.cn/maps/vt?lyrs=s@189&gl=cn&x={x}&y={y}&z={z}',
+    //     colorShade: 'dark',
+    //     opacity: 1,
+    //     visible: false,
+    // },
+    // {
+    //     name: 'GoogleHybrid',
+    //     url: '//www.google.cn/maps/vt?lyrs=s,h@189&gl=cn&x={x}&y={y}&z={z}',
+    //     colorShade: 'dark',
+    //     opacity: 1,
+    //     visible: false,
+    // },
+
     {
-        name: 'GoogleHybrid',
-        url: '//www.google.cn/maps/vt?lyrs=s,h@189&gl=cn&x={x}&y={y}&z={z}',
-        colorShade: 'dark',
+        name: 'OpenFreeMap Buildings',
+        type: 'vector',
+        url: '//tiles.openfreemap.org/planet',
+        layer: 'building',
+        layerType: 'fill-extrusion',
+        colorShade: '',
         opacity: 1,
         visible: false,
     },
@@ -80,28 +100,28 @@ let defBaseMaps = [
 
     // //google要申請tokne才能用
     // {
-    //     name: 'googleStreets',
+    //     name: 'GoogleStreets',
     //     url: 'http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
     //     colorShade: 'light',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
-    //     name: 'googleHybrid',
+    //     name: 'GoogleHybrid',
     //     url: 'http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
-    //     name: 'googleSat',
+    //     name: 'GoogleSat',
     //     url: 'http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
-    //     name: 'googleTerrain',
+    //     name: 'GoogleTerrain',
     //     url: 'http://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
@@ -403,5 +423,6 @@ let defBaseMaps = [
     // },
 
 ]
+
 
 export default defBaseMaps

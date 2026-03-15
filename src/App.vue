@@ -84,6 +84,10 @@
 
             <AppPCRIconSrcDarkLight v-if="showSubCmp==='panelCompassRose.iconSrcDark,iconSrcLight'"></AppPCRIconSrcDarkLight>
 
+            <AppPC3Show v-if="showSubCmp==='panelCompass3d.show'"></AppPC3Show>
+
+            <AppPC3Position v-if="showSubCmp==='panelCompass3d.position'"></AppPC3Position>
+
             <AppPLBShow v-if="showSubCmp==='panelLabels.show'"></AppPLBShow>
 
             <AppPLBPosition v-if="showSubCmp==='panelLabels.position'"></AppPLBPosition>
@@ -291,6 +295,8 @@ import AppPCRPosition from './AppPCRPosition.vue'
 import AppPCRSize from './AppPCRSize.vue'
 import AppPCRWithPanel from './AppPCRWithPanel.vue'
 import AppPCRIconSrcDarkLight from './AppPCRIconSrcDarkLight.vue'
+import AppPC3Show from './AppPC3Show.vue'
+import AppPC3Position from './AppPC3Position.vue'
 import AppPLBShow from './AppPLBShow.vue'
 import AppPLBPosition from './AppPLBPosition.vue'
 import AppPLBTitle from './AppPLBTitle.vue'
@@ -403,6 +409,8 @@ export default {
         AppPCRSize,
         AppPCRWithPanel,
         AppPCRIconSrcDarkLight,
+        AppPC3Show,
+        AppPC3Position,
         AppPLBShow,
         AppPLBPosition,
         AppPLBTitle,
@@ -524,6 +532,10 @@ export default {
                     'panelCompassRose.size',
                     'panelCompassRose.withPanel',
                     'panelCompassRose.iconSrcDark,iconSrcLight',
+                ],
+                panelCompass3d: [
+                    'panelCompass3d.show',
+                    'panelCompass3d.position',
                 ],
                 panelLabels: [
                     'panelLabels.show',
