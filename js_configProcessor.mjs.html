@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>js/configProcessor.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#applyBaseMaps">applyBaseMaps</a></li><li><a href="global.html#applyProjection">applyProjection</a></li><li><a href="global.html#applyTerrain">applyTerrain</a></li><li><a href="global.html#buildContourLegend">buildContourLegend</a></li><li><a href="global.html#buildItemsList">buildItemsList</a></li><li><a href="global.html#buildPanelStyle">buildPanelStyle</a></li><li><a href="global.html#buildPolygonGeometry">buildPolygonGeometry</a></li><li><a href="global.html#calcPanToCenter">calcPanToCenter</a></li><li><a href="global.html#calcPolygonCenter">calcPolygonCenter</a></li><li><a href="global.html#calcPolylineCenter">calcPolylineCenter</a></li><li><a href="global.html#clearTrackedByPrefix">clearTrackedByPrefix</a></li><li><a href="global.html#clearTrackedMarkersByPrefix">clearTrackedMarkersByPrefix</a></li><li><a href="global.html#computeBasicOpt">computeBasicOpt</a></li><li><a href="global.html#computeClusterOpts">computeClusterOpts</a></li><li><a href="global.html#computePanelBaseMaps">computePanelBaseMaps</a></li><li><a href="global.html#computePanelCompass3d">computePanelCompass3d</a></li><li><a href="global.html#computePanelCompassRose">computePanelCompassRose</a></li><li><a href="global.html#computePanelItems">computePanelItems</a></li><li><a href="global.html#computePanelLabels">computePanelLabels</a></li><li><a href="global.html#computePanelLegends">computePanelLegends</a></li><li><a href="global.html#computePanelScale">computePanelScale</a></li><li><a href="global.html#computePanelZoom">computePanelZoom</a></li><li><a href="global.html#countVisible">countVisible</a></li><li><a href="global.html#createDirectionalPopup">createDirectionalPopup</a></li><li><a href="global.html#createMap">createMap</a></li><li><a href="global.html#findPointById">findPointById</a></li><li><a href="global.html#getContourColor">getContourColor</a></li><li><a href="global.html#getMapObject">getMapObject</a></li><li><a href="global.html#pointInRing">pointInRing</a></li><li><a href="global.html#recheckSinglePopupDir">recheckSinglePopupDir</a></li><li><a href="global.html#registerIconImage">registerIconImage</a></li><li><a href="global.html#renderContourSets">renderContourSets</a></li><li><a href="global.html#renderGeojsonSets">renderGeojsonSets</a></li><li><a href="global.html#renderImageSets">renderImageSets</a></li><li><a href="global.html#renderPointSets">renderPointSets</a></li><li><a href="global.html#renderPolygonSets">renderPolygonSets</a></li><li><a href="global.html#renderPolylineSets">renderPolylineSets</a></li><li><a href="global.html#resolveFeatureById">resolveFeatureById</a></li><li><a href="global.html#setOverlayOpacity">setOverlayOpacity</a></li><li><a href="global.html#switchBaseMap">switchBaseMap</a></li><li><a href="global.html#toggleOverlayVisible">toggleOverlayVisible</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">js/configProcessor.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * configProcessor.mjs
+ * 負責將傳入的 opt prop 正規化為各面板配置，全部為純函式（無副作用）
+ */
+import get from 'lodash-es/get.js'
+import cloneDeep from 'lodash-es/cloneDeep.js'
+import size from 'lodash-es/size.js'
+import isNumber from 'lodash-es/isNumber.js'
+import isEqual from 'lodash-es/isEqual.js'
+import isbol from 'wsemi/src/isbol.mjs'
+import isstr from 'wsemi/src/isstr.mjs'
+import isestr from 'wsemi/src/isestr.mjs'
+import isobj from 'wsemi/src/isobj.mjs'
+import isnum from 'wsemi/src/isnum.mjs'
+import isarr from 'wsemi/src/isarr.mjs'
+import cdbl from 'wsemi/src/cdbl.mjs'
+
+
+/** 面板尺寸樣式輔助（純函式） */
+export function buildPanelStyle(p) {
+    let s = {}
+    if (isNumber(p.width)) s.width = `${p.width}px`
+    if (isNumber(p.maxWidth)) s.maxWidth = `${p.maxWidth}px`
+    if (isNumber(p.height)) s.height = `${p.height}px`
+    if (isNumber(p.maxHeight)) s.maxHeight = `${p.maxHeight}px`
+    return s
+}
+
+
+/**
+ * 計算底圖面板配置
+ * @param {Object} opt - Vue component 的 opt prop
+ * @param {Array} currentBaseMaps - 目前 panelBaseMaps.baseMaps（用於保留已選底圖）
+ * @param {Object} currentTerrainMapTemp - 上次 terrainMap 快照（用於 diff）
+ * @param {Array} currentBaseMapsDataTemp - 上次底圖資料快照（用於 diff）
+ * @param {Array} defBaseMapsData - 預設底圖配置
+ * @param {Object} defTerrainMapData - 預設地形配置
+ * @returns {{ panelBaseMaps, terrainMap, baseMapsChanged, terrainChanged }}
+ */
+export function computePanelBaseMaps(opt, currentBaseMaps, currentTerrainMapTemp, currentBaseMapsDataTemp, defBaseMapsData, defTerrainMapData) {
+    let def = { show: true, position: 'topleft', baseMaps: [], stopWheel: false }
+    let p = get(opt, 'panelBaseMaps', null); if (!isobj(p)) p = {}
+    p = { ...def, ...p }
+    if (size(get(p, 'baseMaps', [])) === 0) {
+        p.baseMaps = size(currentBaseMaps) === 0 ? cloneDeep(defBaseMapsData) : cloneDeep(currentBaseMaps)
+    }
+    p = cloneDeep(p); p.style = buildPanelStyle(p)
+
+    let tm = get(p, 'terrainMap', null)
+    if (!isobj(tm)) tm = cloneDeep(defTerrainMapData)
+    let terrainChanged = !isEqual(currentTerrainMapTemp, tm)
+
+    let baseMapsChanged = !isEqual(currentBaseMapsDataTemp, p.baseMaps)
+
+    return { panelBaseMaps: p, terrainMap: tm, baseMapsChanged, terrainChanged }
+}
+
+
+/**
+ * 計算羅盤圖標面板配置
+ * @param {Object} opt
+ * @param {{ iconCompassRoseLight, iconCompassRoseDark }} uiResData
+ * @returns {Object} panelCompassRose
+ */
+export function computePanelCompassRose(opt, uiResData) {
+    let def = {
+        show: false, position: 'topright', size: 120, withPanel: false, iconSrc: null,
+        iconSrcLight: uiResData.iconCompassRoseLight,
+        iconSrcDark: uiResData.iconCompassRoseDark,
+    }
+    let p = get(opt, 'panelCompassRose', null); if (!isobj(p)) p = {}
+    return cloneDeep({ ...def, ...p })
+}
+
+
+/** 計算 3D 指北針面板配置 */
+export function computePanelCompass3d(opt) {
+    let def = { show: true, position: 'topright', size: 44 }
+    let p = get(opt, 'panelCompass3d', null); if (!isobj(p)) p = {}
+    return cloneDeep({ ...def, ...p })
+}
+
+
+/** 計算地圖資訊面板配置 */
+export function computePanelLabels(opt) {
+    let def = { show: true, title: '', useItems: ['lng', 'lat', 'zoom'], lng: 'Longitude', lat: 'Latitude', zoom: 'Zoom', position: 'topright' }
+    let p = get(opt, 'panelLabels', null); if (!isobj(p)) p = {}
+    p = cloneDeep({ ...def, ...p }); p.style = buildPanelStyle(p)
+    return p
+}
+
+
+/** 計算圖層顯隱面板配置 */
+export function computePanelItems(opt) {
+    let def = { show: true, position: 'topleft', stopWheel: false }
+    let p = get(opt, 'panelItems', null); if (!isobj(p)) p = {}
+    p = cloneDeep({ ...def, ...p }); p.style = buildPanelStyle(p)
+    return p
+}
+
+
+/** 計算縮放按鈕面板配置 */
+export function computePanelZoom(opt) {
+    let def = { show: true, position: 'bottomleft' }
+    let p = get(opt, 'panelZoom', null); if (!isobj(p)) p = {}
+    return cloneDeep({ ...def, ...p })
+}
+
+
+/** 計算比例尺面板配置 */
+export function computePanelScale(opt) {
+    let def = { show: true, position: 'bottomright' }
+    let p = get(opt, 'panelScale', null); if (!isobj(p)) p = {}
+    return cloneDeep({ ...def, ...p })
+}
+
+
+/** 計算圖例面板配置 */
+export function computePanelLegends(opt) {
+    let def = { show: true, position: 'bottomright', maxWidth: 300, stopWheel: false }
+    let p = get(opt, 'panelLegends', null); if (!isobj(p)) p = {}
+    p = cloneDeep({ ...def, ...p }); p.style = buildPanelStyle(p)
+    return p
+}
+
+
+/**
+ * 計算叢集化設定
+ * @param {Object} opt
+ * @returns {{ enabled, radius, maxZoom, levelNum, levelValues, levelRadius,
+ *             levelFillColors, levelLineColors, levelLineWidths, levelTextSizes, levelTextColors, key }}
+ */
+export function computeClusterOpts(opt) {
+    let cpEnabled = get(opt, 'clusterPoints', null)
+    if (!isbol(cpEnabled)) cpEnabled = false
+    let cpRadius = get(opt, 'clusterPointsRadius', null)
+    if (!isnum(cpRadius)) cpRadius = 50; else cpRadius = cdbl(cpRadius)
+    let cpMaxZoom = get(opt, 'clusterPointsMaxZoom', null)
+    if (!isnum(cpMaxZoom)) cpMaxZoom = 14; else cpMaxZoom = cdbl(cpMaxZoom)
+    let cpLevelNum = get(opt, 'clusterPointsLevelNum', null)
+    if (!isnum(cpLevelNum)) cpLevelNum = 3; else cpLevelNum = Math.max(1, Math.round(cdbl(cpLevelNum)))
+    let cpLevelValues = get(opt, 'clusterPointsLevelValues', null)
+    if (!isarr(cpLevelValues) || cpLevelValues.length !== cpLevelNum - 1) cpLevelValues = [10, 100].slice(0, cpLevelNum - 1)
+    let cpLevelRadius = get(opt, 'clusterPointsLevelRadius', null)
+    if (!isarr(cpLevelRadius) || cpLevelRadius.length !== cpLevelNum) cpLevelRadius = [10, 15, 20].slice(0, cpLevelNum)
+    let cpLevelFillColors = get(opt, 'clusterPointsLevelFillColors', null)
+    if (!isarr(cpLevelFillColors) || cpLevelFillColors.length !== cpLevelNum) cpLevelFillColors = ['rgba(140, 40, 25, 0.75)', 'rgba(255, 125, 50, 0.75)', 'rgba(255, 50, 100, 0.75)'].slice(0, cpLevelNum)
+    let cpLevelLineColors = get(opt, 'clusterPointsLevelLineColors', null)
+    if (!isarr(cpLevelLineColors) || cpLevelLineColors.length !== cpLevelNum) cpLevelLineColors = ['#fff', '#fff', '#fff'].slice(0, cpLevelNum)
+    let cpLevelLineWidths = get(opt, 'clusterPointsLevelLineWidths', null)
+    if (!isarr(cpLevelLineWidths) || cpLevelLineWidths.length !== cpLevelNum) cpLevelLineWidths = [2, 2, 2].slice(0, cpLevelNum)
+    let cpLevelTextSizes = get(opt, 'clusterPointsLevelTextSizes', null)
+    if (!isarr(cpLevelTextSizes) || cpLevelTextSizes.length !== cpLevelNum) cpLevelTextSizes = [12, 12, 12].slice(0, cpLevelNum)
+    let cpLevelTextColors = get(opt, 'clusterPointsLevelTextColors', null)
+    if (!isarr(cpLevelTextColors) || cpLevelTextColors.length !== cpLevelNum) cpLevelTextColors = ['#fff', '#fff', '#fff'].slice(0, cpLevelNum)
+
+    let key = JSON.stringify({
+        cpEnabled, cpRadius, cpMaxZoom, cpLevelNum, cpLevelValues,
+        cpLevelRadius, cpLevelFillColors, cpLevelLineColors, cpLevelLineWidths,
+        cpLevelTextSizes, cpLevelTextColors,
+    })
+
+    return {
+        enabled: cpEnabled,
+        radius: cpRadius,
+        maxZoom: cpMaxZoom,
+        levelNum: cpLevelNum,
+        levelValues: cpLevelValues,
+        levelRadius: cpLevelRadius,
+        levelFillColors: cpLevelFillColors,
+        levelLineColors: cpLevelLineColors,
+        levelLineWidths: cpLevelLineWidths,
+        levelTextSizes: cpLevelTextSizes,
+        levelTextColors: cpLevelTextColors,
+        key,
+    }
+}
+
+
+/**
+ * 計算基本 opt 設定（zoom, center, panelBackgroundColor 等）
+ * @param {Object} opt
+ * @param {Number} currentZoom
+ * @param {Array} currentCenter
+ * @returns {{ zoom, center, panelBackgroundColor, displayPopupOnlyone, popupPosition, tooltipPosition, projection }}
+ */
+export function computeBasicOpt(opt, currentZoom, currentCenter) {
+    let pbc = get(opt, 'panelBackgroundColor', null)
+    if (!isstr(pbc)) pbc = 'rgba(255,255,255,0.95)'
+
+    let zoom = get(opt, 'zoom', null)
+    if (!isnum(zoom)) zoom = 6
+    zoom = Math.min(Math.max(zoom, 1), 18)
+
+    let center = get(opt, 'center', null)
+    let ck = isarr(center) &amp;&amp; size(center) === 2 &amp;&amp; isNumber(center[0]) &amp;&amp; isNumber(center[1])
+    if (!ck) center = [23.5, 121.1]
+    center = cloneDeep(center)
+
+    let displayPopupOnlyone = get(opt, 'displayPopupOnlyone', null)
+    if (!isbol(displayPopupOnlyone)) displayPopupOnlyone = true
+
+    let pp = get(opt, 'popupPosition', null)
+    let popupPosition = (isestr(pp) &amp;&amp; ['top', 'bottom', 'left', 'right'].includes(pp)) ? pp : null
+
+    let tp = get(opt, 'tooltipPosition', null)
+    let tooltipPosition = (isestr(tp) &amp;&amp; ['top', 'bottom', 'left', 'right'].includes(tp)) ? tp : null
+
+    let projection = get(opt, 'projection', null)
+    if (!isstr(projection) || !['globe', 'mercator'].includes(projection)) projection = ''
+
+    return { zoom, center, panelBackgroundColor: pbc, displayPopupOnlyone, popupPosition, tooltipPosition, projection }
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Mar 15 2026 22:48:39 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>

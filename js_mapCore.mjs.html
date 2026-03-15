@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>js/mapCore.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#applyBaseMaps">applyBaseMaps</a></li><li><a href="global.html#applyProjection">applyProjection</a></li><li><a href="global.html#applyTerrain">applyTerrain</a></li><li><a href="global.html#buildContourLegend">buildContourLegend</a></li><li><a href="global.html#buildItemsList">buildItemsList</a></li><li><a href="global.html#buildPanelStyle">buildPanelStyle</a></li><li><a href="global.html#buildPolygonGeometry">buildPolygonGeometry</a></li><li><a href="global.html#calcPanToCenter">calcPanToCenter</a></li><li><a href="global.html#calcPolygonCenter">calcPolygonCenter</a></li><li><a href="global.html#calcPolylineCenter">calcPolylineCenter</a></li><li><a href="global.html#clearTrackedByPrefix">clearTrackedByPrefix</a></li><li><a href="global.html#clearTrackedMarkersByPrefix">clearTrackedMarkersByPrefix</a></li><li><a href="global.html#computeBasicOpt">computeBasicOpt</a></li><li><a href="global.html#computeClusterOpts">computeClusterOpts</a></li><li><a href="global.html#computePanelBaseMaps">computePanelBaseMaps</a></li><li><a href="global.html#computePanelCompass3d">computePanelCompass3d</a></li><li><a href="global.html#computePanelCompassRose">computePanelCompassRose</a></li><li><a href="global.html#computePanelItems">computePanelItems</a></li><li><a href="global.html#computePanelLabels">computePanelLabels</a></li><li><a href="global.html#computePanelLegends">computePanelLegends</a></li><li><a href="global.html#computePanelScale">computePanelScale</a></li><li><a href="global.html#computePanelZoom">computePanelZoom</a></li><li><a href="global.html#countVisible">countVisible</a></li><li><a href="global.html#createDirectionalPopup">createDirectionalPopup</a></li><li><a href="global.html#createMap">createMap</a></li><li><a href="global.html#findPointById">findPointById</a></li><li><a href="global.html#getContourColor">getContourColor</a></li><li><a href="global.html#getMapObject">getMapObject</a></li><li><a href="global.html#pointInRing">pointInRing</a></li><li><a href="global.html#recheckSinglePopupDir">recheckSinglePopupDir</a></li><li><a href="global.html#registerIconImage">registerIconImage</a></li><li><a href="global.html#renderContourSets">renderContourSets</a></li><li><a href="global.html#renderGeojsonSets">renderGeojsonSets</a></li><li><a href="global.html#renderImageSets">renderImageSets</a></li><li><a href="global.html#renderPointSets">renderPointSets</a></li><li><a href="global.html#renderPolygonSets">renderPolygonSets</a></li><li><a href="global.html#renderPolylineSets">renderPolylineSets</a></li><li><a href="global.html#resolveFeatureById">resolveFeatureById</a></li><li><a href="global.html#setOverlayOpacity">setOverlayOpacity</a></li><li><a href="global.html#switchBaseMap">switchBaseMap</a></li><li><a href="global.html#toggleOverlayVisible">toggleOverlayVisible</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">js/mapCore.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * mapCore.mjs
+ * 地圖實例建立、投影管理
+ */
+import get from 'lodash-es/get.js'
+import size from 'lodash-es/size.js'
+import isNumber from 'lodash-es/isNumber.js'
+import isarr from 'wsemi/src/isarr.mjs'
+import isnum from 'wsemi/src/isnum.mjs'
+import maplibregl from 'maplibre-gl'
+
+
+/**
+ * 建立 MapLibre 地圖實例
+ * @param {HTMLElement} container - 地圖容器 DOM 元素
+ * @param {Object} opt - Vue component 的 opt prop
+ * @returns {maplibregl.Map}
+ */
+export function createMap(container, opt) {
+    let center = get(opt, 'center', null)
+    let ck = isarr(center) &amp;&amp; size(center) === 2 &amp;&amp; isNumber(center[0]) &amp;&amp; isNumber(center[1])
+    if (!ck) center = [23.5, 121.1]
+
+    let zoom = get(opt, 'zoom', null)
+    if (!isnum(zoom)) zoom = 6
+    zoom = Math.min(Math.max(zoom, 1), 18)
+
+    return new maplibregl.Map({
+        container,
+        style: {
+            version: 8,
+            sources: {},
+            layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f0f0f0' } }],
+        },
+        center: [center[1], center[0]],
+        zoom,
+        attributionControl: false,
+        antialias: true,
+    })
+}
+
+
+/**
+ * 切換 globe/mercator 投影
+ * @param {Object} map - MapLibre 地圖實例
+ * @param {String} projection - '' | 'globe' | 'mercator'（'' = auto 模式）
+ */
+export function applyProjection(map, projection) {
+    if (!map) return
+    let target
+    if (projection === '') {
+        target = map.getZoom() &lt;= 8 ? 'globe' : 'mercator'
+    }
+    else {
+        target = projection
+    }
+    try {
+        map.setProjection({ type: target })
+    }
+    catch (e) {
+        console.warn('[mapCore] setProjection error:', e)
+    }
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Mar 15 2026 22:48:39 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>
