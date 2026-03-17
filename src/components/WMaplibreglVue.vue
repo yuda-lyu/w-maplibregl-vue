@@ -530,10 +530,16 @@ export default {
 
         switchBaseMap(idx) {
             _switchBaseMap(this.map, this.panelBaseMaps.baseMaps, idx)
+            // 同步 baseMapsDataTemp，避免 processPanelBaseMaps 將此 visible 變動誤判為 baseMapsChanged
+            // 而觸發 applyBaseMaps()，導致底圖圖層被重新堆疊在資料圖層上方
+            this.baseMapsDataTemp = cloneDeep(this.panelBaseMaps.baseMaps)
             this.$forceUpdate()
         },
         toggleOverlayVisible(idx) {
             _toggleOverlayVisible(this.map, this.panelBaseMaps.baseMaps, idx)
+            // 同步 baseMapsDataTemp，避免 processPanelBaseMaps 將此 visible 變動誤判為 baseMapsChanged
+            // 而觸發 applyBaseMaps()，導致底圖圖層被重新堆疊在資料圖層上方
+            this.baseMapsDataTemp = cloneDeep(this.panelBaseMaps.baseMaps)
             this.$forceUpdate()
         },
         setOverlayOpacity(idx, val) {
@@ -620,7 +626,14 @@ export default {
             vo.panelBaseMapsTemp = cloneDeep(result.panelBaseMaps)
             if (result.baseMapsChanged) {
                 vo.baseMapsDataTemp = cloneDeep(result.panelBaseMaps.baseMaps)
-                if (vo.map && vo.mapLoaded) vo.applyBaseMaps()
+                if (vo.map && vo.mapLoaded) {
+                    vo.applyBaseMaps()
+                    // applyBaseMaps 會移除後重新加入底圖圖層（無 beforeId），使底圖排在資料圖層之上；
+                    // 因此需將所有已追蹤的資料圖層移回最頂層
+                    each(vo.trackedLayerIds, (lid) => {
+                        if (vo.map.getLayer(lid)) vo.map.moveLayer(lid)
+                    })
+                }
             }
             if (result.terrainChanged && vo.map && vo.mapLoaded) vo.applyTerrain()
         },
