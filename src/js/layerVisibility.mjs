@@ -46,6 +46,56 @@ export function clearTrackedMarkersByPrefix(prefix, trackedMarkers) {
 
 
 /**
+ * Remove layers/sources whose set index is no longer present.
+ * Renderers use the set index in layer/source ids, so shrinking a set array leaves
+ * higher-index ids behind unless they are cleaned before the next render.
+ * @param {Object} map - MapLibre map object
+ * @param {Object} tracked - { sourceIds, layerIds }
+ * @param {String} prefix - layer/source id prefix
+ * @param {Number} count - current set count
+ */
+export function removeStaleSetLayers(map, tracked, prefix, count) {
+    if (!map) return
+    count = isNumber(count) ? count : 0
+    let idxOf = (id) => {
+        let m = String(id).match(/(\d+)/)
+        return m ? parseInt(m[1], 10) : -1
+    }
+    let isStale = (id) => id.startsWith(prefix) && idxOf(id) >= count
+    let style = map.getStyle ? (map.getStyle() || {}) : {}
+    let staleLayers = filter((style.layers || []).map((l) => l.id), isStale)
+    let staleSources = filter(Object.keys(style.sources || {}), isStale)
+
+    let dl = map._delegatedListeners
+    if (dl && map.off) {
+        each(Object.keys(dl), (type) => {
+            each([...(dl[type] || [])], (entry) => {
+                if (entry && entry.listener && filter(entry.layers || [], isStale).length > 0) {
+                    try {
+                        map.off(type, entry.layers, entry.listener)
+                    }
+                    catch (e) {
+                        /* ignore stale listener cleanup failures */
+                    }
+                }
+            })
+        })
+    }
+
+    each(staleLayers, (id) => {
+        if (map.getLayer(id)) map.removeLayer(id)
+    })
+    each(staleSources, (id) => {
+        if (map.getSource(id)) map.removeSource(id)
+    })
+    if (tracked) {
+        tracked.layerIds = filter(tracked.layerIds || [], (id) => !isStale(id))
+        tracked.sourceIds = filter(tracked.sourceIds || [], (id) => !isStale(id))
+    }
+}
+
+
+/**
  * 建立統一的圖層列表（供圖層顯隱面板使用）
  * @param {Array} imageSets
  * @param {Array} pointSets
@@ -60,12 +110,24 @@ export function buildItemsList(imageSets, pointSets, polylineSets, polygonSets, 
     let add = (n, m, o, v, p) => {
         items.push({ name: n, msg: m, order: o, visible: v, updatePath: p })
     }
-    each(imageSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `imageSets.${k}.visible`) })
-    each(pointSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `pointSets.${k}.visible`) })
-    each(polylineSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `polylineSets.${k}.visible`) })
-    each(polygonSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `polygonSets.${k}.visible`) })
-    each(geojsonSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `geojsonSets.${k}.visible`) })
-    each(contourSets, (v, k) => { add(v.title, v.msg, v.order, v.visible, `contourSets.${k}.visible`) })
+    each(imageSets, (v, k) => {
+        add(v.title, v.msg, v.order, v.visible, `imageSets.${k}.visible`)
+    })
+    each(pointSets, (v, k) => {
+        add(v.title, v.msg, v.order, v.visible, `pointSets.${k}.visible`)
+    })
+    each(polylineSets, (v, k) => {
+        add(v.title, v.msg, v.order, v.visible, `polylineSets.${k}.visible`)
+    })
+    each(polygonSets, (v, k) => {
+        add(v.title, v.msg, v.order, v.visible, `polygonSets.${k}.visible`)
+    })
+    each(geojsonSets, (v, k) => {
+        add(v.title, v.msg, v.order, v.visible, `geojsonSets.${k}.visible`)
+    })
+    each(contourSets, (v, k) => {
+        add(v.title, v.msg, v.order, v.visible, `contourSets.${k}.visible`)
+    })
     let ord = sortBy(filter(items, (v) => isNumber(v.order)), 'order')
     let rest = filter(items, (v) => !isNumber(v.order))
     return cloneDeep([...ord, ...rest])
@@ -79,6 +141,8 @@ export function buildItemsList(imageSets, pointSets, polylineSets, polygonSets, 
  */
 export function countVisible(arr) {
     let i = 0
-    each(arr, (v) => { if (v.visible) i++ })
+    each(arr, (v) => {
+        if (v.visible) i++
+    })
     return i
 }

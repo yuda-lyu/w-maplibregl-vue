@@ -274,7 +274,7 @@ import uiRes from '../uiRes.mjs'
 import { createMap, applyProjection as _applyProjection } from '../js/mapCore.mjs'
 import { applyBaseMaps, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
-import { clearTrackedByPrefix, clearTrackedMarkersByPrefix, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
+import { clearTrackedByPrefix, clearTrackedMarkersByPrefix, removeStaleSetLayers, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
 import { createDirectionalPopup, recheckSinglePopupDir, registerIconImage } from '../js/popupManager.mjs'
 import { renderPointSets as renderPointSetsImpl, renderPolylineSets as renderPolylineSetsImpl, renderPolygonSets as renderPolygonSetsImpl, renderGeojsonSets as renderGeojsonSetsImpl, renderImageSets as renderImageSetsImpl, renderContourSets as renderContourSetsImpl } from '../js/layerRenderers.mjs'
 import { getMapObject as _getMapObject, calcPanToCenter, findPointById, resolveFeatureById } from '../js/publicApi.mjs'
@@ -774,6 +774,7 @@ export default {
             // 過渡期清理：移除舊的 DOM markers
             vo.trackedMarkers = clearTrackedMarkersByPrefix('point', vo.trackedMarkers)
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds, markers: vo.trackedMarkers }
+            removeStaleSetLayers(vo.map, tracked, 'point-', vo.pointSets.length)
             let fCtr = { value: vo.featureIdCounter || 0 }
             renderPointSetsImpl(vo.map, vo.pointSets, vo.clusterOpts, tracked, {
                 registerIcon: (key, src, w, h) => registerIconImage(vo.map, key, src, w, h),
@@ -862,6 +863,7 @@ export default {
         renderPolylineSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
+            removeStaleSetLayers(vo.map, tracked, 'polyline-', vo.polylineSets.length)
             let fCtr = { value: vo.featureIdCounter || 0 }
             renderPolylineSetsImpl(vo.map, vo.polylineSets, tracked, {
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
@@ -895,6 +897,7 @@ export default {
         renderPolygonSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
+            removeStaleSetLayers(vo.map, tracked, 'polygon-', vo.polygonSets.length)
             let fCtr = { value: vo.featureIdCounter || 0 }
             renderPolygonSetsImpl(vo.map, vo.polygonSets, tracked, {
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
@@ -928,6 +931,7 @@ export default {
         renderGeojsonSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
+            removeStaleSetLayers(vo.map, tracked, 'geojson-', vo.geojsonSets.length)
             renderGeojsonSetsImpl(vo.map, vo.geojsonSets, tracked, {
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
                 onTooltipEnter: (lngLat, fd, type, idx) => vo.showFeatureTooltip(lngLat, fd, type, idx),
@@ -955,6 +959,7 @@ export default {
         renderImageSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
+            removeStaleSetLayers(vo.map, tracked, 'image-', vo.imageSets.length)
             renderImageSetsImpl(vo.map, vo.imageSets, tracked)
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
         },
@@ -1011,6 +1016,7 @@ export default {
         renderContourSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
+            removeStaleSetLayers(vo.map, tracked, 'contour-', vo.contourSets.length)
             let fCtr = { value: vo.featureIdCounter || 0 }
             renderContourSetsImpl(vo.map, vo.contourSets, tracked, vo.contourSubCounts, {
                 onContourClick: (e, ps, kps, cs, kcs, contourSets) => {
