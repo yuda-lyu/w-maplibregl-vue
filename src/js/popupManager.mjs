@@ -82,7 +82,7 @@ export function createDirectionalPopup(map, lngLat, content, position, gap, extr
     popup._dirMeta = {
         lngLat, position, chosenDir: chosenPos,
         gap, extraOpts, anchorOffset: anchorOffset || null,
-        contentHtml: content.innerHTML,
+        contentEl: content, // 存「活的 DOM 元素參考」, 翻轉/recheck 時沿用同一元素(非靜態 innerHTML 複製)
     }
     return popup
 }
@@ -139,11 +139,11 @@ export function recheckSinglePopupDir(map, popup) {
         if (newDir === chosenDir) return popup
 
         let newPos = posMap[newDir]
-        let newContent = document.createElement('div'); newContent.innerHTML = meta.contentHtml
+        let newContent = meta.contentEl // 沿用同一個活的 slot 元素, 不重建靜態複製(維持可互動)
         popup.remove()
         let newPopup = new maplibregl.Popup({ ...extraOpts, anchor: newPos.anchor, offset: newPos.offset })
             .setLngLat(lngLat).setDOMContent(newContent).addTo(map)
-        newPopup._dirMeta = { ...meta, chosenDir: newDir, contentHtml: newContent.innerHTML }
+        newPopup._dirMeta = { ...meta, chosenDir: newDir }
         return newPopup
     }
     catch (e) { return popup }

@@ -155,10 +155,12 @@
         <div style="display:none;">
             <!-- point popup -->
             <div ref="refPointPopup">
-                <slot name="point-popup"
-                    :point="activePoint"
-                    :pointSet="activePointSet"
-                ></slot>
+                <div ref="refPointPopupInner">
+                    <slot name="point-popup"
+                        :point="activePoint"
+                        :pointSet="activePointSet"
+                    ></slot>
+                </div>
             </div>
             <!-- point tooltip -->
             <div ref="refPointTooltip">
@@ -169,10 +171,12 @@
             </div>
             <!-- polyline popup -->
             <div ref="refPolylinePopup">
-                <slot name="polyline-popup"
-                    :polylineSet="activePolylineSet"
-                    :polylineSets="polylineSets"
-                ></slot>
+                <div ref="refPolylinePopupInner">
+                    <slot name="polyline-popup"
+                        :polylineSet="activePolylineSet"
+                        :polylineSets="polylineSets"
+                    ></slot>
+                </div>
             </div>
             <!-- polyline tooltip -->
             <div ref="refPolylineTooltip">
@@ -183,10 +187,12 @@
             </div>
             <!-- polygon popup -->
             <div ref="refPolygonPopup">
-                <slot name="polygon-popup"
-                    :polygonSet="activePolygonSet"
-                    :polygonSets="polygonSets"
-                ></slot>
+                <div ref="refPolygonPopupInner">
+                    <slot name="polygon-popup"
+                        :polygonSet="activePolygonSet"
+                        :polygonSets="polygonSets"
+                    ></slot>
+                </div>
             </div>
             <!-- polygon tooltip -->
             <div ref="refPolygonTooltip">
@@ -197,10 +203,12 @@
             </div>
             <!-- geojson popup -->
             <div ref="refGeojsonPopup">
-                <slot name="geojson-popup"
-                    :geojsonSet="activeGeojsonSet"
-                    :geojsonSets="geojsonSets"
-                ></slot>
+                <div ref="refGeojsonPopupInner">
+                    <slot name="geojson-popup"
+                        :geojsonSet="activeGeojsonSet"
+                        :geojsonSets="geojsonSets"
+                    ></slot>
+                </div>
             </div>
             <!-- geojson tooltip -->
             <div ref="refGeojsonTooltip">
@@ -211,10 +219,12 @@
             </div>
             <!-- contour popup -->
             <div ref="refContourPopup">
-                <slot name="contour-popup"
-                    :contourSet="activeContourSet"
-                    :contourSets="contourSets"
-                ></slot>
+                <div ref="refContourPopupInner">
+                    <slot name="contour-popup"
+                        :contourSet="activeContourSet"
+                        :contourSets="contourSets"
+                    ></slot>
+                </div>
             </div>
             <!-- contour tooltip -->
             <div ref="refContourTooltip">
@@ -786,11 +796,9 @@ export default {
                     }
                     vo.activePoint = ptData; vo.activePointSet = psData
                     vo.$nextTick(() => {
-                        let refEl = vo.$refs.refPointPopup; if (!refEl) return
-                        let html = refEl.innerHTML.trim(); if (!html) return
+                        let refInner = vo.$refs.refPointPopupInner; if (!refInner || !refInner.innerHTML.trim()) return
                         vo.closeAllPopupsIfOnlyone()
-                        let ct = document.createElement('div'); ct.innerHTML = html
-                        vo.featurePopup = createDirectionalPopup(vo.map, coords, ct, vo.popupPosition, 0, { maxWidth: 'none' }, popAnchor)
+                        vo.featurePopup = createDirectionalPopup(vo.map, coords, refInner, vo.popupPosition, 0, { maxWidth: 'none' }, popAnchor)
                         vo.featurePopupOwner = `pointSets.${p._kps}`
                     })
                 },
@@ -1020,11 +1028,9 @@ export default {
                     if (isfun(cs.funSetsClick)) cs.funSetsClick(msg)
                     vo.activeContourSet = cs
                     vo.$nextTick(() => {
-                        let el = vo.$refs.refContourPopup; if (!el) return
-                        let html = el.innerHTML.trim(); if (!html) return
+                        let el = vo.$refs.refContourPopupInner; if (!el || !el.innerHTML.trim()) return
                         vo.closeAllPopupsIfOnlyone()
-                        let container = document.createElement('div'); container.innerHTML = html
-                        vo.featurePopup = createDirectionalPopup(vo.map, e.lngLat, container, vo.popupPosition, 5, { maxWidth: 'none' })
+                        vo.featurePopup = createDirectionalPopup(vo.map, e.lngLat, el, vo.popupPosition, 5, { maxWidth: 'none' })
                         vo.featurePopupOwner = `contourSets.${kcs}`
                     })
                 },
@@ -1086,12 +1092,10 @@ export default {
             else if (type === 'polygon') vo.activePolygonSet = featureData
             else if (type === 'geojson') vo.activeGeojsonSet = featureData
             vo.$nextTick(() => {
-                let refName = type === 'polyline' ? 'refPolylinePopup' : type === 'polygon' ? 'refPolygonPopup' : 'refGeojsonPopup'
-                let el = vo.$refs[refName]; if (!el) return
-                let html = el.innerHTML.trim(); if (!html) return
+                let refName = type === 'polyline' ? 'refPolylinePopupInner' : type === 'polygon' ? 'refPolygonPopupInner' : 'refGeojsonPopupInner'
+                let el = vo.$refs[refName]; if (!el || !el.innerHTML.trim()) return
                 vo.closeAllPopupsIfOnlyone()
-                let container = document.createElement('div'); container.innerHTML = html
-                vo.featurePopup = createDirectionalPopup(vo.map, lngLat, container, vo.popupPosition, 5, { maxWidth: 'none' })
+                vo.featurePopup = createDirectionalPopup(vo.map, lngLat, el, vo.popupPosition, 5, { maxWidth: 'none' })
                 vo.featurePopupOwner = `${type}Sets.${setIndex}`
             })
         },
@@ -1143,14 +1147,18 @@ export default {
 
         closeAllPopupsIfOnlyone() {
             let vo = this
-            if (!vo.displayPopupOnlyone) return
-            each(vo.trackedMarkers, (m) => {
-                let p = m.getPopup(); if (p && p.isOpen()) p.remove()
-            })
+            // 任一時刻僅一個 featurePopup, 開新的前一律先關舊的(不受 displayPopupOnlyone 影響):
+            // featurePopup 為單例變數, 若不關舊的就覆寫參考會造成舊 popup 殘留;
+            // 且承載活 slot 元素時, 開新 popup 會把活元素自舊 popup 搬走 → 舊 popup 變空
             if (vo.featurePopup) {
                 vo.featurePopup.remove(); vo.featurePopup = null
             }
             vo.featurePopupOwner = ''
+            // marker 自帶的 popup 可同時開多個, 僅在 displayPopupOnlyone 時才一併關閉
+            if (!vo.displayPopupOnlyone) return
+            each(vo.trackedMarkers, (m) => {
+                let p = m.getPopup(); if (p && p.isOpen()) p.remove()
+            })
         },
 
         // ===== 公開方法 =====
@@ -1178,13 +1186,19 @@ export default {
             let ptype = get(ptData, 'type', null) || get(psData, 'type', 'circle')
             vo.activePoint = ptData; vo.activePointSet = psData
             vo.$nextTick(() => {
-                let refEl = vo.$refs.refPointPopup
-                let html = refEl ? refEl.innerHTML.trim() : ''
-                if (!html) html = `<div style="padding:8px"><b>${ptData.title || ''}</b><br/>${ptData.msg || ''}</div>`
+                let refInner = vo.$refs.refPointPopupInner
+                let hasLive = !!(refInner && refInner.innerHTML.trim())
                 vo.closeAllPopupsIfOnlyone()
-                let ct = document.createElement('div'); ct.innerHTML = html
+                let content
+                if (hasLive) {
+                    content = refInner // 有 slot: 用活元素(可互動)
+                }
+                else {
+                    content = document.createElement('div') // 無 slot: 用靜態 fallback
+                    content.innerHTML = `<div style="padding:8px"><b>${ptData.title || ''}</b><br/>${ptData.msg || ''}</div>`
+                }
                 let popGap = ptype === 'circle' ? (ptData.radius || get(psData, 'size', 10)) : 5
-                vo.featurePopup = createDirectionalPopup(vo.map, [ll[1], ll[0]], ct, vo.popupPosition, popGap, { maxWidth: 'none' })
+                vo.featurePopup = createDirectionalPopup(vo.map, [ll[1], ll[0]], content, vo.popupPosition, popGap, { maxWidth: 'none' })
                 vo.featurePopupOwner = foundPsIndex >= 0 ? `pointSets.${foundPsIndex}` : ''
             })
             return ll
@@ -1197,13 +1211,19 @@ export default {
             if (type === 'polyline') vo.activePolylineSet = featureData
             else if (type === 'polygon') vo.activePolygonSet = featureData
             vo.$nextTick(() => {
-                let refName = type === 'polyline' ? 'refPolylinePopup' : 'refPolygonPopup'
+                let refName = type === 'polyline' ? 'refPolylinePopupInner' : 'refPolygonPopupInner'
                 let el = vo.$refs[refName]
-                let html = el ? el.innerHTML.trim() : ''
-                if (!html) html = `<div style="padding:8px"><b>${featureData.title || ''}</b><br/>${featureData.msg || ''}</div>`
+                let hasLive = !!(el && el.innerHTML.trim())
                 vo.closeAllPopupsIfOnlyone()
-                let ct = document.createElement('div'); ct.innerHTML = html
-                vo.featurePopup = createDirectionalPopup(vo.map, [center[1], center[0]], ct, vo.popupPosition, 5, { maxWidth: 'none' })
+                let content
+                if (hasLive) {
+                    content = el // 有 slot: 用活元素(可互動)
+                }
+                else {
+                    content = document.createElement('div') // 無 slot: 用靜態 fallback
+                    content.innerHTML = `<div style="padding:8px"><b>${featureData.title || ''}</b><br/>${featureData.msg || ''}</div>`
+                }
+                vo.featurePopup = createDirectionalPopup(vo.map, [center[1], center[0]], content, vo.popupPosition, 5, { maxWidth: 'none' })
                 vo.featurePopupOwner = ownerPath
             })
             return center
