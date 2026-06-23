@@ -4,10 +4,19 @@
  */
 import each from 'lodash-es/each.js'
 import get from 'lodash-es/get.js'
+import omit from 'lodash-es/omit.js'
+import isEqual from 'lodash-es/isEqual.js'
 import isobj from 'wsemi/src/isobj.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import isnum from 'wsemi/src/isnum.mjs'
+import isarr from 'wsemi/src/isarr.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
+
+
+// fill-extrusion 建物色: 帶 colorFillExtrusion 則統一上色, 否則回退資料 colour 屬性(向後相容)
+function fxColorExpr(bm) {
+    return bm.colorFillExtrusion || ['coalesce', ['get', 'colour'], '#aaaaaa']
+}
 
 
 /**
@@ -30,7 +39,7 @@ export function applyBaseMaps(map, baseMaps) {
             let paint = {}
             if (layerType === 'fill-extrusion') {
                 paint = {
-                    'fill-extrusion-color': ['coalesce', ['get', 'colour'], '#aaaaaa'],
+                    'fill-extrusion-color': fxColorExpr(bm),
                     'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['coalesce', ['get', 'render_height'], ['get', 'height'], 0]],
                     'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0]],
                     'fill-extrusion-opacity': op,
@@ -58,9 +67,13 @@ export function applyBaseMaps(map, baseMaps) {
         map.addLayer({ id: layerId, type: 'raster', source: srcId, paint: { 'raster-opacity': op }, layout: { visibility: bm.visible ? 'visible' : 'none' } })
     }
     // 第一輪：底圖（colorShade 非空），確保先渲染在下方
-    each(baseMaps, (bm, k) => { if (isestr(bm.colorShade)) addBaseMapLayer(bm, k) })
+    each(baseMaps, (bm, k) => {
+        if (isestr(bm.colorShade)) addBaseMapLayer(bm, k)
+    })
     // 第二輪：疊加圖層（colorShade 空字串），後渲染在底圖上方
-    each(baseMaps, (bm, k) => { if (!isestr(bm.colorShade)) addBaseMapLayer(bm, k) })
+    each(baseMaps, (bm, k) => {
+        if (!isestr(bm.colorShade)) addBaseMapLayer(bm, k)
+    })
 }
 
 
@@ -72,7 +85,10 @@ export function applyBaseMaps(map, baseMaps) {
  */
 export function applyTerrain(map, terrainMap, trackedLayerIds) {
     if (!map) return
-    try { map.setTerrain(null) } catch (e) {}
+    try {
+        map.setTerrain(null)
+    }
+    catch (e) {}
     if (map.getLayer('terrain-hillshade')) map.removeLayer('terrain-hillshade')
     if (map.getSource('terrain-hillshade-src')) map.removeSource('terrain-hillshade-src')
     if (map.getSource('terrain-src')) map.removeSource('terrain-src')
@@ -109,7 +125,8 @@ export function applyTerrain(map, terrainMap, trackedLayerIds) {
         let hillshadeSourceId = 'terrain-src'
         if (hu !== tu) {
             let hillshadeSrcSpec = {
-                type: 'raster-dem', tiles: [hu],
+                type: 'raster-dem',
+                tiles: [hu],
                 tileSize: hsrc.tileSize || 256,
                 encoding: hsrc.encoding || 'terrarium',
             }
@@ -119,10 +136,14 @@ export function applyTerrain(map, terrainMap, trackedLayerIds) {
         }
         let insertBefore = null
         for (let lid of (trackedLayerIds || [])) {
-            if (map.getLayer(lid)) { insertBefore = lid; break }
+            if (map.getLayer(lid)) {
+                insertBefore = lid; break
+            }
         }
         let hillshadeSpec = {
-            id: 'terrain-hillshade', type: 'hillshade', source: hillshadeSourceId,
+            id: 'terrain-hillshade',
+            type: 'hillshade',
+            source: hillshadeSourceId,
             paint: {
                 'hillshade-shadow-color': '#473B24',
                 'hillshade-exaggeration': isnum(tm.hillshadeExaggeration) ? cdbl(tm.hillshadeExaggeration) : 0.5,
@@ -185,4 +206,56 @@ export function setOverlayOpacity(map, baseMaps, idx, val) {
     else {
         map.setPaintProperty(id, 'raster-opacity', bm.opacity)
     }
+}
+
+
+/**
+ * 就地更新單一底圖 entry 的 paint(顏色/透明度), 不重建 layer/source —
+ * 避免重抓圖磚與其他未變更圖層閃爍。供「僅 paint 變更」的快路徑使用。
+ * @param {Object} map
+ * @param {Object} bm - 單一底圖配置
+ * @param {Number} k - 索引
+ */
+export function updateBaseMapPaint(map, bm, k) {
+    if (!map) return
+    let layerId = `basemap-layer-${k}`
+    if (!map.getLayer(layerId)) return
+    if (bm.type === 'vector') {
+        let lt = bm.layerType || 'fill'
+        let op = bm.opacity != null ? bm.opacity : 0.8
+        if (lt === 'fill-extrusion') {
+            map.setPaintProperty(layerId, 'fill-extrusion-color', fxColorExpr(bm))
+            map.setPaintProperty(layerId, 'fill-extrusion-opacity', op)
+        }
+        else if (lt === 'line') {
+            map.setPaintProperty(layerId, 'line-opacity', op)
+        }
+        else {
+            map.setPaintProperty(layerId, 'fill-opacity', op)
+        }
+    }
+    else {
+        let op = bm.opacity != null ? bm.opacity : 1
+        map.setPaintProperty(layerId, 'raster-opacity', op)
+    }
+}
+
+
+/**
+ * 判斷新舊 baseMaps 是否「僅 paint 欄位(colorFillExtrusion/opacity)變更」。
+ * true → 可只就地 setPaintProperty(updateBaseMapPaint), 無需重建底圖;
+ * false → 有結構性變更(數量/url/type/layer/layerType/visible 等), 需完整重套 applyBaseMaps。
+ * @param {Array} prev - 上次套用的 baseMaps
+ * @param {Array} next - 本次 baseMaps
+ * @returns {Boolean}
+ */
+export function isBaseMapsPaintOnlyDiff(prev, next) {
+    if (!isarr(prev) || !isarr(next) || prev.length !== next.length) return false
+    let stripPaint = (e) => omit(e, ['colorFillExtrusion', 'opacity'])
+    let anyChanged = false
+    for (let i = 0; i < next.length; i++) {
+        if (!isEqual(stripPaint(prev[i]), stripPaint(next[i]))) return false //有非 paint 變更
+        if (!isEqual(prev[i], next[i])) anyChanged = true
+    }
+    return anyChanged
 }

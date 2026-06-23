@@ -64,7 +64,11 @@ export function computePanelBaseMaps(opt, currentBaseMaps, currentTerrainMapTemp
  */
 export function computePanelCompassRose(opt, uiResData) {
     let def = {
-        show: false, position: 'topright', size: 120, withPanel: false, iconSrc: null,
+        show: false,
+        position: 'topright',
+        size: 120,
+        withPanel: false,
+        iconSrc: null,
         iconSrcLight: uiResData.iconCompassRoseLight,
         iconSrcDark: uiResData.iconCompassRoseDark,
     }
@@ -155,9 +159,17 @@ export function computeClusterOpts(opt) {
     if (!isarr(cpLevelTextColors) || cpLevelTextColors.length !== cpLevelNum) cpLevelTextColors = ['#fff', '#fff', '#fff'].slice(0, cpLevelNum)
 
     let key = JSON.stringify({
-        cpEnabled, cpRadius, cpMaxZoom, cpLevelNum, cpLevelValues,
-        cpLevelRadius, cpLevelFillColors, cpLevelLineColors, cpLevelLineWidths,
-        cpLevelTextSizes, cpLevelTextColors,
+        cpEnabled,
+        cpRadius,
+        cpMaxZoom,
+        cpLevelNum,
+        cpLevelValues,
+        cpLevelRadius,
+        cpLevelFillColors,
+        cpLevelLineColors,
+        cpLevelLineWidths,
+        cpLevelTextSizes,
+        cpLevelTextColors,
     })
 
     return {
@@ -182,7 +194,7 @@ export function computeClusterOpts(opt) {
  * @param {Object} opt
  * @param {Number} currentZoom
  * @param {Array} currentCenter
- * @returns {{ zoom, center, panelBackgroundColor, displayPopupOnlyone, popupPosition, tooltipPosition, projection }}
+ * @returns {{ zoom, center, panelBackgroundColor, displayPopupOnlyone, displayOrderByType, popupPosition, tooltipPosition, projection }}
  */
 export function computeBasicOpt(opt, currentZoom, currentCenter) {
     let pbc = get(opt, 'panelBackgroundColor', null)
@@ -200,6 +212,9 @@ export function computeBasicOpt(opt, currentZoom, currentCenter) {
     let displayPopupOnlyone = get(opt, 'displayPopupOnlyone', null)
     if (!isbol(displayPopupOnlyone)) displayPopupOnlyone = true
 
+    let displayOrderByType = get(opt, 'displayOrderByType', null)
+    if (!isbol(displayOrderByType)) displayOrderByType = true
+
     let pp = get(opt, 'popupPosition', null)
     let popupPosition = (isestr(pp) && ['top', 'bottom', 'left', 'right'].includes(pp)) ? pp : null
 
@@ -209,5 +224,5 @@ export function computeBasicOpt(opt, currentZoom, currentCenter) {
     let projection = get(opt, 'projection', null)
     if (!isstr(projection) || !['globe', 'mercator'].includes(projection)) projection = ''
 
-    return { zoom, center, panelBackgroundColor: pbc, displayPopupOnlyone, popupPosition, tooltipPosition, projection }
+    return { zoom, center, panelBackgroundColor: pbc, displayPopupOnlyone, displayOrderByType, popupPosition, tooltipPosition, projection }
 }

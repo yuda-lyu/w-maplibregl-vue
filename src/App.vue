@@ -58,6 +58,8 @@
 
             <AppBSCPanelBackgroundColor v-if="showSubCmp==='panelBackgroundColor'"></AppBSCPanelBackgroundColor>
 
+            <AppBSCDisplayOrderByType v-if="showSubCmp==='displayOrderByType'"></AppBSCDisplayOrderByType>
+
             <AppPBMShow v-if="showSubCmp==='panelBaseMaps.show'"></AppPBMShow>
 
             <AppPBMBaseMaps v-if="showSubCmp==='panelBaseMaps.baseMaps'"></AppPBMBaseMaps>
@@ -69,6 +71,8 @@
             <AppPBMMaxWidth v-if="showSubCmp==='panelBaseMaps.maxWidth'"></AppPBMMaxWidth>
 
             <AppPBMMaxHeight v-if="showSubCmp==='panelBaseMaps.maxHeight'"></AppPBMMaxHeight>
+
+            <AppPBMColorFillExtrusion v-if="showSubCmp==='baseMap.colorFillExtrusion'"></AppPBMColorFillExtrusion>
 
             <AppPSCShow v-if="showSubCmp==='panelScale.show'"></AppPSCShow>
 
@@ -282,12 +286,14 @@ import AppBSCSize from './AppBSCSize.vue'
 import AppBSCCenter from './AppBSCCenter.vue'
 import AppBSCZoom from './AppBSCZoom.vue'
 import AppBSCPanelBackgroundColor from './AppBSCPanelBackgroundColor.vue'
+import AppBSCDisplayOrderByType from './AppBSCDisplayOrderByType.vue'
 import AppPBMShow from './AppPBMShow.vue'
 import AppPBMBaseMaps from './AppPBMBaseMaps.vue'
 import AppPBMPosition from './AppPBMPosition.vue'
 import AppPBMWidth from './AppPBMWidth.vue'
 import AppPBMMaxWidth from './AppPBMMaxWidth.vue'
 import AppPBMMaxHeight from './AppPBMMaxHeight.vue'
+import AppPBMColorFillExtrusion from './AppPBMColorFillExtrusion.vue'
 import AppPSCShow from './AppPSCShow.vue'
 import AppPSCPosition from './AppPSCPosition.vue'
 import AppPCRShow from './AppPCRShow.vue'
@@ -396,12 +402,14 @@ export default {
         AppBSCCenter,
         AppBSCZoom,
         AppBSCPanelBackgroundColor,
+        AppBSCDisplayOrderByType,
         AppPBMShow,
         AppPBMBaseMaps,
         AppPBMPosition,
         AppPBMWidth,
         AppPBMMaxWidth,
         AppPBMMaxHeight,
+        AppPBMColorFillExtrusion,
         AppPSCShow,
         AppPSCPosition,
         AppPCRShow,
@@ -513,6 +521,7 @@ export default {
                     'center',
                     'zoom',
                     'panelBackgroundColor',
+                    'displayOrderByType',
                 ],
                 panelBaseMaps: [
                     'panelBaseMaps.show',
@@ -521,6 +530,7 @@ export default {
                     'panelBaseMaps.width',
                     'panelBaseMaps.maxWidth',
                     'panelBaseMaps.maxHeight',
+                    'baseMap.colorFillExtrusion',
                 ],
                 panelScale: [
                     'panelScale.show',

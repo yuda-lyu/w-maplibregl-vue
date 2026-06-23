@@ -19,7 +19,6 @@ import isearr from 'wsemi/src/isearr.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import isobj from 'wsemi/src/isobj.mjs'
 import isfun from 'wsemi/src/isfun.mjs'
-import isbol from 'wsemi/src/isbol.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import size from 'lodash-es/size.js'
 import oc from 'wsemi/src/color.mjs'
@@ -232,7 +231,9 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
             }
             else {
                 let matchArgs = ['match', ['get', '_kpt']]
-                each(offKeys, (k) => { matchArgs.push(parseInt(k, 10)); matchArgs.push(['literal', iconOffsets[k]]) })
+                each(offKeys, (k) => {
+                    matchArgs.push(parseInt(k, 10)); matchArgs.push(['literal', iconOffsets[k]])
+                })
                 matchArgs.push(['literal', firstOff])
                 iconOffsetExpr = matchArgs
             }
@@ -256,7 +257,9 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
                 }
                 map.addSource(srcId, srcOpts)
                 map.addLayer({
-                    id: circleId, type: 'circle', source: srcId,
+                    id: circleId,
+                    type: 'circle',
+                    source: srcId,
                     filter: ['==', ['get', '_ptype'], 'circle'],
                     paint: {
                         'circle-radius': ['get', '_radius'],
@@ -266,12 +269,17 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
                     }
                 })
                 map.addLayer({
-                    id: symbolId, type: 'symbol', source: srcId,
+                    id: symbolId,
+                    type: 'symbol',
+                    source: srcId,
                     filter: ['==', ['get', '_ptype'], 'icon'],
                     layout: {
-                        'icon-image': ['get', '_iconKey'], 'icon-size': 1,
-                        'icon-anchor': 'center', 'icon-offset': iconOffsetExpr,
-                        'icon-allow-overlap': true, 'icon-ignore-placement': true,
+                        'icon-image': ['get', '_iconKey'],
+                        'icon-size': 1,
+                        'icon-anchor': 'center',
+                        'icon-offset': iconOffsetExpr,
+                        'icon-allow-overlap': true,
+                        'icon-ignore-placement': true,
                     }
                 })
                 tracked.sourceIds.push(srcId)
@@ -287,7 +295,9 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
                         return expr
                     }
                     map.addLayer({
-                        id: clusterCircleId, type: 'circle', source: srcId,
+                        id: clusterCircleId,
+                        type: 'circle',
+                        source: srcId,
                         filter: ['has', 'point_count'],
                         paint: {
                             'circle-color': buildStepExpr(clusterOpts.levelFillColors),
@@ -297,7 +307,9 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
                         }
                     })
                     map.addLayer({
-                        id: clusterCountId, type: 'symbol', source: srcId,
+                        id: clusterCountId,
+                        type: 'symbol',
+                        source: srcId,
                         filter: ['has', 'point_count'],
                         layout: {
                             'text-field': '{point_count_abbreviated}',
@@ -314,11 +326,17 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
                         let src = map.getSource(srcId); if (!src) return
                         let result = src.getClusterExpansionZoom(clusterId)
                         if (result && typeof result.then === 'function') {
-                            result.then((zoom) => { map.easeTo({ center: fs[0].geometry.coordinates, zoom }) }).catch(() => {})
+                            result.then((zoom) => {
+                                map.easeTo({ center: fs[0].geometry.coordinates, zoom })
+                            }).catch(() => {})
                         }
                     })
-                    map.on('mouseenter', clusterCircleId, () => { map.getCanvas().style.cursor = 'pointer' })
-                    map.on('mouseleave', clusterCircleId, () => { map.getCanvas().style.cursor = '' })
+                    map.on('mouseenter', clusterCircleId, () => {
+                        map.getCanvas().style.cursor = 'pointer'
+                    })
+                    map.on('mouseleave', clusterCircleId, () => {
+                        map.getCanvas().style.cursor = ''
+                    })
                 }
 
                 let handlePointEvent = (e, action) => {
@@ -341,8 +359,12 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
                     map.getCanvas().style.cursor = 'pointer'
                     handlePointEvent(e, (ev, ptData, psData, p, coords) => callbacks.onPointEnter(ptData, psData, p, coords))
                 })
-                map.on('mouseleave', circleId, () => { map.getCanvas().style.cursor = ''; callbacks.onPointLeave() })
-                map.on('mouseleave', symbolId, () => { map.getCanvas().style.cursor = ''; callbacks.onPointLeave() })
+                map.on('mouseleave', circleId, () => {
+                    map.getCanvas().style.cursor = ''; callbacks.onPointLeave()
+                })
+                map.on('mouseleave', symbolId, () => {
+                    map.getCanvas().style.cursor = ''; callbacks.onPointLeave()
+                })
             }
         }
 
@@ -393,6 +415,7 @@ export function renderPolylineSets(map, polylineSets, tracked, callbacks, featur
             map.addLayer({ id: lid, type: 'line', source: sid, paint: { 'line-color': pls.lineColor, 'line-width': pls.lineWidth } })
             tracked.sourceIds.push(sid); tracked.layerIds.push(lid)
             map.on('click', lid, (e) => {
+                if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'polyline')) return //讓位給更高優先型別(如點)
                 if (isfun(pls.funSetsClick)) pls.funSetsClick({ ev: e, polylineSet: pls, kpolylineSet: k, polylineSets })
                 callbacks.onPopupClick(e.lngLat, pls, 'polyline', k)
             })
@@ -400,7 +423,9 @@ export function renderPolylineSets(map, polylineSets, tracked, callbacks, featur
                 map.getCanvas().style.cursor = 'pointer'
                 callbacks.onTooltipEnter(e.lngLat, pls, 'polyline', k)
             })
-            map.on('mouseleave', lid, () => { map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave() })
+            map.on('mouseleave', lid, () => {
+                map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave()
+            })
         }
     })
 }
@@ -434,6 +459,7 @@ export function renderPolygonSets(map, polygonSets, tracked, callbacks, featureI
             map.addLayer({ id: lid, type: 'line', source: sid, paint: { 'line-color': pg.lineColor, 'line-width': pg.lineWidth } })
             tracked.sourceIds.push(sid); tracked.layerIds.push(fid, lid)
             map.on('click', fid, (e) => {
+                if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'polygon')) return //讓位給更高優先型別(點/線/geojson)
                 if (isfun(pg.funSetsClick)) pg.funSetsClick({ ev: e, polygonSet: pg, kpolygonSet: k, polygonSets })
                 callbacks.onPopupClick(e.lngLat, pg, 'polygon', k)
             })
@@ -441,7 +467,9 @@ export function renderPolygonSets(map, polygonSets, tracked, callbacks, featureI
                 map.getCanvas().style.cursor = 'pointer'
                 callbacks.onTooltipEnter(e.lngLat, pg, 'polygon', k)
             })
-            map.on('mouseleave', fid, () => { map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave() })
+            map.on('mouseleave', fid, () => {
+                map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave()
+            })
         }
     })
 }
@@ -460,8 +488,12 @@ export function renderGeojsonSets(map, geojsonSets, tracked, callbacks) {
         let allLids = [ptsLid, lnsLid, pgsFid, pgsLid]
 
         if (!gj.visible || !isobj(get(gj, 'geojson', null))) {
-            each(allLids, (lid) => { if (map.getLayer(lid)) map.removeLayer(lid) })
-            each(allSids, (sid) => { if (map.getSource(sid)) map.removeSource(sid) })
+            each(allLids, (lid) => {
+                if (map.getLayer(lid)) map.removeLayer(lid)
+            })
+            each(allSids, (sid) => {
+                if (map.getSource(sid)) map.removeSource(sid)
+            })
             tracked.layerIds = tracked.layerIds.filter((x) => allLids.indexOf(x) < 0)
             tracked.sourceIds = tracked.sourceIds.filter((x) => allSids.indexOf(x) < 0)
             return
@@ -470,6 +502,7 @@ export function renderGeojsonSets(map, geojsonSets, tracked, callbacks) {
         let splitted = splitAndProcGeoJSON(gj.geojson)
         let bindEvents = (layerId) => {
             map.on('click', layerId, (e) => {
+                if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'geojson')) return //讓位給更高優先型別(點/線)
                 if (isfun(gj.funSetsClick)) gj.funSetsClick({ ev: e, lat: e.lngLat.lat, lng: e.lngLat.lng, geojsonSet: gj, kgeojsonSet: k, geojsonSets })
                 callbacks.onPopupClick(e.lngLat, gj, 'geojson', k)
             })
@@ -477,24 +510,32 @@ export function renderGeojsonSets(map, geojsonSets, tracked, callbacks) {
                 map.getCanvas().style.cursor = 'pointer'
                 callbacks.onTooltipEnter(e.lngLat, gj, 'geojson', k)
             })
-            map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave() })
+            map.on('mouseleave', layerId, () => {
+                map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave()
+            })
         }
 
-        if (map.getSource(ptsSid)) { map.getSource(ptsSid).setData(splitted.points) }
+        if (map.getSource(ptsSid)) {
+            map.getSource(ptsSid).setData(splitted.points)
+        }
         else {
             map.addSource(ptsSid, { type: 'geojson', data: splitted.points, generateId: true })
             map.addLayer({ id: ptsLid, type: 'circle', source: ptsSid, paint: { 'circle-color': gj.fillColor, 'circle-radius': 5, 'circle-stroke-color': gj.lineColor, 'circle-stroke-width': 1 } })
             tracked.sourceIds.push(ptsSid); tracked.layerIds.push(ptsLid)
             bindEvents(ptsLid)
         }
-        if (map.getSource(lnsSid)) { map.getSource(lnsSid).setData(splitted.lines) }
+        if (map.getSource(lnsSid)) {
+            map.getSource(lnsSid).setData(splitted.lines)
+        }
         else {
             map.addSource(lnsSid, { type: 'geojson', data: splitted.lines, generateId: true })
             map.addLayer({ id: lnsLid, type: 'line', source: lnsSid, paint: { 'line-color': gj.lineColor, 'line-width': gj.lineWidth } })
             tracked.sourceIds.push(lnsSid); tracked.layerIds.push(lnsLid)
             bindEvents(lnsLid)
         }
-        if (map.getSource(pgsSid)) { map.getSource(pgsSid).setData(splitted.polygons) }
+        if (map.getSource(pgsSid)) {
+            map.getSource(pgsSid).setData(splitted.polygons)
+        }
         else {
             map.addSource(pgsSid, { type: 'geojson', data: splitted.polygons, generateId: true })
             map.addLayer({ id: pgsFid, type: 'fill', source: pgsSid, paint: { 'fill-color': gj.fillColor, 'fill-opacity': 1 } })
@@ -632,7 +673,10 @@ export function renderContourSets(map, contourSets, tracked, subCounts, callback
                 map.addLayer({ id: lid, type: 'line', source: sid, paint: { 'line-color': ps.lineColor, 'line-width': cs.lineWidth } })
                 tracked.sourceIds.push(sid); tracked.layerIds.push(fid, lid)
 
-                map.on('click', fid, (e) => { callbacks.onContourClick(e, ps, kps, cs, kcs, contourSets) })
+                map.on('click', fid, (e) => {
+                    if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'contour')) return //讓位給更高優先型別
+                    callbacks.onContourClick(e, ps, kps, cs, kcs, contourSets)
+                })
                 map.on('mouseenter', fid, (e) => {
                     map.getCanvas().style.cursor = 'pointer'
                     if (cs.changeStyleWhenHover) {

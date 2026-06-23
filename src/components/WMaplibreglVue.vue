@@ -272,7 +272,7 @@ import uiRes from '../uiRes.mjs'
 
 // ===== 提取的功能模組 =====
 import { createMap, applyProjection as _applyProjection } from '../js/mapCore.mjs'
-import { applyBaseMaps, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity } from '../js/basemapManager.mjs'
+import { applyBaseMaps, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
 import { clearTrackedByPrefix, clearTrackedMarkersByPrefix, removeStaleSetLayers, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
 import { createDirectionalPopup, recheckSinglePopupDir, registerIconImage } from '../js/popupManager.mjs'
@@ -358,6 +358,9 @@ export default {
             trackedSourceIds: [],
             trackedLayerIds: [],
             trackedMarkers: [],
+
+            displayOrderByType: true, //圖徵依型別面積序堆疊(點>線>面類>影像), 點擊命中小面積圖徵; false=維持插入序
+            raiseOrderPending: false, //圖層型別重排的 idle 補重排去抖旗標
 
             // 叢集化設定（統一物件，由 computeClusterOpts 產生）
             clusterOpts: {
@@ -588,6 +591,7 @@ export default {
             }
             vo.showLoc = { lat: dig(basic.center[0], 7), lng: dig(basic.center[1], 7) }
             vo.displayPopupOnlyone = basic.displayPopupOnlyone
+            vo.displayOrderByType = basic.displayOrderByType
             if (basic.popupPosition) vo.popupPosition = basic.popupPosition
             if (basic.tooltipPosition) vo.tooltipPosition = basic.tooltipPosition
 
@@ -635,14 +639,25 @@ export default {
             vo.panelBaseMaps = result.panelBaseMaps
             vo.panelBaseMapsTemp = cloneDeep(result.panelBaseMaps)
             if (result.baseMapsChanged) {
-                vo.baseMapsDataTemp = cloneDeep(result.panelBaseMaps.baseMaps)
+                let prevBaseMaps = vo.baseMapsDataTemp //更新前的上次套用值, 供 paint-only 判斷
+                let nextBaseMaps = result.panelBaseMaps.baseMaps
+                vo.baseMapsDataTemp = cloneDeep(nextBaseMaps)
                 if (vo.map && vo.mapLoaded) {
-                    vo.applyBaseMaps()
-                    // applyBaseMaps 會移除後重新加入底圖圖層（無 beforeId），使底圖排在資料圖層之上；
-                    // 因此需將所有已追蹤的資料圖層移回最頂層
-                    each(vo.trackedLayerIds, (lid) => {
-                        if (vo.map.getLayer(lid)) vo.map.moveLayer(lid)
-                    })
+                    if (isBaseMapsPaintOnlyDiff(prevBaseMaps, nextBaseMaps)) {
+                        //僅 paint(如 colorFillExtrusion/opacity)變更: 就地 setPaintProperty,
+                        //不重建底圖 layer/source → 不重抓圖磚、不影響其他未變更圖層(無閃爍)
+                        each(nextBaseMaps, (bm, k) => updateBaseMapPaint(vo.map, bm, k))
+                    }
+                    else {
+                        vo.applyBaseMaps()
+                        // applyBaseMaps 會移除後重新加入底圖圖層（無 beforeId），使底圖排在資料圖層之上；
+                        // 因此需將所有已追蹤的資料圖層移回最頂層
+                        each(vo.trackedLayerIds, (lid) => {
+                            if (vo.map.getLayer(lid)) vo.map.moveLayer(lid)
+                        })
+                        //再依圖徵型別面積序重排(點>線>面), 使點擊命中小面積圖徵(displayOrderByType=false 則不重排)
+                        vo.raiseFeatureLayersByType()
+                    }
                 }
             }
             if (result.terrainChanged && vo.map && vo.mapLoaded) vo.applyTerrain()
@@ -723,6 +738,61 @@ export default {
         applyAllDataLayers() {
             this.renderPointSets(); this.renderPolylineSets(); this.renderPolygonSets()
             this.renderGeojsonSets(); this.renderContourSets(); this.renderImageSets()
+        },
+
+        //依「圖徵型別面積序」重新堆疊圖層: image(最底)→contour→polygon→geojson→polyline→point(最頂),
+        //使面積小者在上(點>線>面), 點擊才命中小面積圖徵而非被大面積圖徵攔截; 同時讓資料圖層位於底圖之上.
+        //直接掃描地圖實際圖層(不依賴 tracked: 點圖層非同步加入, tracked 常不同步). displayOrderByType=false 時不重排.
+        raiseFeatureLayersByType() {
+            let vo = this
+            if (!vo.map || !vo.displayOrderByType) return
+            let style = vo.map.getStyle()
+            if (!style || !isarr(style.layers)) return
+            let ids = style.layers.map((l) => l.id).filter((id) => isestr(id))
+            //由下到上, 後 moveLayer 者疊在上層(moveLayer 無 beforeId = 移到最頂)
+            let order = ['image-', 'contour-', 'polygon-', 'geojson-', 'polyline-', 'point-']
+            each(order, (prefix) => {
+                each(ids, (lid) => {
+                    if (lid.indexOf(prefix) === 0 && vo.map.getLayer(lid)) vo.map.moveLayer(lid)
+                })
+            })
+        },
+        //圖層(尤其點)為非同步載入, 故先同步重排一次, 再掛一次性 idle 待延後圖層就位後重排;
+        //raiseOrderPending 將連續 render 的多次重排合併為一次 idle 重排
+        scheduleRaiseFeatureLayers() {
+            let vo = this
+            if (!vo.map || !vo.mapLoaded || !vo.displayOrderByType) return
+            vo.raiseFeatureLayersByType()
+            if (vo.raiseOrderPending) return
+            vo.raiseOrderPending = true
+            vo.map.once('idle', () => {
+                vo.raiseOrderPending = false
+                vo.raiseFeatureLayersByType()
+            })
+        },
+        //點擊優先權: displayOrderByType 開啟時, 同一點若有「更高優先型別」(point>polyline>geojson>polygon>contour)的圖徵,
+        //則目前型別讓位(該 click handler 直接 return, 不開 popup 也不觸發 funSetsClick), 使點擊確定命中視覺最上層型別,
+        //與 z-order 一致. 因 maplibre 各圖層 click listener 皆會觸發、displayPopupOnlyone 為「最後者勝」, 故需此閘門.
+        shouldDeferFeatureClick(screenPoint, myType) {
+            let vo = this
+            if (!vo.displayOrderByType || !vo.map || !screenPoint) return false
+            let rank = { point: 5, polyline: 4, geojson: 3, polygon: 2, contour: 1 }
+            let myRank = rank[myType] || 0
+            let fs = []
+            try {
+                fs = vo.map.queryRenderedFeatures(screenPoint) || []
+            }
+            catch (e) {
+                return false
+            }
+            let topRank = 0
+            each(fs, (f) => {
+                let lid = (f && f.layer && f.layer.id) || ''
+                each(rank, (r, t) => {
+                    if (r > topRank && lid.indexOf(t + '-') === 0) topRank = r
+                })
+            })
+            return topRank > myRank //同點有更高優先型別 → 讓位
         },
 
         clearTrackedByPrefix(prefix) {
@@ -839,6 +909,7 @@ export default {
             vo.trackedLayerIds = tracked.layerIds
             vo.trackedMarkers = tracked.markers
             vo.featureIdCounter = fCtr.value
+            vo.scheduleRaiseFeatureLayers()
         },
 
         // -- 折線 --
@@ -866,12 +937,14 @@ export default {
             removeStaleSetLayers(vo.map, tracked, 'polyline-', vo.polylineSets.length)
             let fCtr = { value: vo.featureIdCounter || 0 }
             renderPolylineSetsImpl(vo.map, vo.polylineSets, tracked, {
+                shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
                 onTooltipEnter: (lngLat, fd, type, idx) => vo.showFeatureTooltip(lngLat, fd, type, idx),
                 onTooltipLeave: () => vo.hideFeatureTooltip(),
             }, fCtr)
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
             vo.featureIdCounter = fCtr.value
+            vo.scheduleRaiseFeatureLayers()
         },
 
         // -- 多邊形 --
@@ -900,12 +973,14 @@ export default {
             removeStaleSetLayers(vo.map, tracked, 'polygon-', vo.polygonSets.length)
             let fCtr = { value: vo.featureIdCounter || 0 }
             renderPolygonSetsImpl(vo.map, vo.polygonSets, tracked, {
+                shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
                 onTooltipEnter: (lngLat, fd, type, idx) => vo.showFeatureTooltip(lngLat, fd, type, idx),
                 onTooltipLeave: () => vo.hideFeatureTooltip(),
             }, fCtr)
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
             vo.featureIdCounter = fCtr.value
+            vo.scheduleRaiseFeatureLayers()
         },
 
         // -- GeoJSON --
@@ -933,11 +1008,13 @@ export default {
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
             removeStaleSetLayers(vo.map, tracked, 'geojson-', vo.geojsonSets.length)
             renderGeojsonSetsImpl(vo.map, vo.geojsonSets, tracked, {
+                shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
                 onTooltipEnter: (lngLat, fd, type, idx) => vo.showFeatureTooltip(lngLat, fd, type, idx),
                 onTooltipLeave: () => vo.hideFeatureTooltip(),
             })
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
+            vo.scheduleRaiseFeatureLayers()
         },
 
         // -- 影像 --
@@ -962,6 +1039,7 @@ export default {
             removeStaleSetLayers(vo.map, tracked, 'image-', vo.imageSets.length)
             renderImageSetsImpl(vo.map, vo.imageSets, tracked)
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
+            vo.scheduleRaiseFeatureLayers()
         },
 
         // -- 等值線 --
@@ -1019,6 +1097,7 @@ export default {
             removeStaleSetLayers(vo.map, tracked, 'contour-', vo.contourSets.length)
             let fCtr = { value: vo.featureIdCounter || 0 }
             renderContourSetsImpl(vo.map, vo.contourSets, tracked, vo.contourSubCounts, {
+                shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onContourClick: (e, ps, kps, cs, kcs, contourSets) => {
                     let msg = {
                         ev: e,
@@ -1057,6 +1136,7 @@ export default {
             }, fCtr)
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
             vo.featureIdCounter = fCtr.value
+            vo.scheduleRaiseFeatureLayers()
         },
 
         // ===== 圖層顯隱 =====

@@ -32,7 +32,6 @@ let defBaseMaps = [
         colorShade: 'dark',
         opacity: 1,
         visible: false,
-        attribution: 'Tiles &copy; Esri'
     },
 
     // //使用google.cn圖資, maplibre-gl嚴格限制cors無法使用
