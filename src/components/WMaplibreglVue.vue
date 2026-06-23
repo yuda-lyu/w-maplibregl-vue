@@ -1351,6 +1351,13 @@ export default {
 .clsScale { padding:2px 6px; font-size:0.7rem; border-radius:3px; }
 
 ::v-deep .maplibregl-popup-content { padding:0; border-radius:5px; }
+/* 放大 popup 關閉按鈕（maplibre 預設過小不好點） */
+::v-deep .maplibregl-popup-close-button {
+    width:26px; height:26px; padding:0;
+    font-size:22px; line-height:24px;
+    border-radius:0 5px 0 5px;
+}
+::v-deep .maplibregl-popup-close-button:hover { background-color:rgba(0,0,0,0.08); }
 /* tooltip 樣式：移除關閉按鈕 padding 並加上陰影，pointer-events:none 避免遮擋 canvas 事件造成閃爍 */
 ::v-deep .wlv2-tooltip { pointer-events: none; }
 ::v-deep .wlv2-tooltip .maplibregl-popup-content { padding:0; border-radius:5px; box-shadow:0 2px 8px rgba(0,0,0,0.25); }

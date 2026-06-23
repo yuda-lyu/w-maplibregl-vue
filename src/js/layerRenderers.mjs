@@ -14,21 +14,21 @@ import each from 'lodash-es/each.js'
 import get from 'lodash-es/get.js'
 import lmap from 'lodash-es/map.js'
 import isNumber from 'lodash-es/isNumber.js'
+import size from 'lodash-es/size.js'
+import reverse from 'lodash-es/reverse.js'
 import isarr from 'wsemi/src/isarr.mjs'
 import isearr from 'wsemi/src/isearr.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import isobj from 'wsemi/src/isobj.mjs'
 import isfun from 'wsemi/src/isfun.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
-import size from 'lodash-es/size.js'
 import oc from 'wsemi/src/color.mjs'
+import dig from 'wsemi/src/dig.mjs'
 import calcContours from 'w-gis/src/calcContours.mjs'
 import fixCloseMultiPolygon from 'w-gis/src/fixCloseMultiPolygon.mjs'
 import flattenMultiPolygon from 'w-gis/src/flattenMultiPolygon.mjs'
 import invCoordMultiPolygonOrMultiPolyline from 'w-gis/src/invCoordMultiPolygonOrMultiPolyline.mjs'
 import splitAndProcGeoJSON from 'w-gis/src/splitAndProcGeoJSON.mjs'
-import dig from 'wsemi/src/dig.mjs'
-import reverse from 'lodash-es/reverse.js'
 
 
 // ===== 工具函式 =====
@@ -403,7 +403,9 @@ export function renderPolylineSets(map, polylineSets, tracked, callbacks, featur
             geomType = 'LineString'; coords = lmap(lls, (ll) => [ll[1], ll[0]])
         }
         else {
-            geomType = 'MultiLineString'; coords = lmap(lls, (seg) => lmap(seg, (ll) => [ll[1], ll[0]]))
+            //lls[0][0][0]為數字才是線陣列層, 否則多包一層(depth-4)須鑽 lls[0]
+            let ml = (isarr(lls[0]) && isarr(lls[0][0]) && isNumber(lls[0][0][0])) ? lls : lls[0]
+            geomType = 'MultiLineString'; coords = lmap(ml, (seg) => lmap(seg, (ll) => [ll[1], ll[0]]))
         }
         let featureId = featureIdCounter.value++
         let geojsonData = { type: 'Feature', id: featureId, geometry: { type: geomType, coordinates: coords } }

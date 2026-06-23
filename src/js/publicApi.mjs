@@ -7,14 +7,15 @@
 import get from 'lodash-es/get.js'
 import cloneDeep from 'lodash-es/cloneDeep.js'
 import isNumber from 'lodash-es/isNumber.js'
+import each from 'lodash-es/each.js'
+import size from 'lodash-es/size.js'
 import isarr from 'wsemi/src/isarr.mjs'
 import isearr from 'wsemi/src/isearr.mjs'
 import isnum from 'wsemi/src/isnum.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import isfun from 'wsemi/src/isfun.mjs'
-import each from 'lodash-es/each.js'
-import size from 'lodash-es/size.js'
+import getCentroidMultiPolygon from 'w-gis/src/getCentroidMultiPolygon.mjs'
 
 
 /**
@@ -56,8 +57,12 @@ export function calcPanToCenter(map, latLng, opt) {
     let latMin = latLng[0] - latRange / 2; let latMax = latLng[0] + latRange / 2
 
     let lngNew = null; let latNew = null
-    if (isNumber(ratioHorizontal)) { let lngMaxNew = lngMax - lngRange * ratioHorizontal; lngNew = (lngMin + lngMaxNew) / 2 }
-    if (isNumber(ratioVertical)) { let latMinNew = latMin + latRange * ratioVertical; latNew = (latMinNew + latMax) / 2 }
+    if (isNumber(ratioHorizontal)) {
+        let lngMaxNew = lngMax - lngRange * ratioHorizontal; lngNew = (lngMin + lngMaxNew) / 2
+    }
+    if (isNumber(ratioVertical)) {
+        let latMinNew = latMin + latRange * ratioVertical; latNew = (latMinNew + latMax) / 2
+    }
 
     let latLngNew = cloneDeep(latLng)
     if (isNumber(ratioVertical)) latLngNew[0] = latNew
@@ -77,9 +82,11 @@ export function calcPanToCenter(map, latLng, opt) {
  */
 export function calcPolylineCenter(latLngs) {
     if (!isearr(latLngs)) return null
-    let seg = isarr(latLngs[0]) && isNumber(latLngs[0][0]) ? latLngs : latLngs[0]
+    let seg = latLngs
+    while (isearr(seg[0]) && isearr(seg[0][0])) seg = seg[0] //鑽到 [[lat,lng],...] 線層, 支援 2/3/4 層
     if (!isearr(seg)) return null
     let mid = seg[Math.floor(seg.length / 2)]
+    if (!isarr(mid)) return null
     return [mid[0], mid[1]]
 }
 
@@ -91,11 +98,9 @@ export function calcPolylineCenter(latLngs) {
  */
 export function calcPolygonCenter(latLngs) {
     if (!isearr(latLngs)) return null
-    let ring = isarr(latLngs[0]) && isNumber(latLngs[0][0]) ? latLngs : latLngs[0]
-    if (!isearr(ring)) return null
-    let sumLat = 0; let sumLng = 0
-    each(ring, (ll) => { sumLat += ll[0]; sumLng += ll[1] })
-    return [sumLat / ring.length, sumLng / ring.length]
+    let pt = getCentroidMultiPolygon(latLngs) //正確處理 ringString/polygon/MultiPolygon(含 depth-4), 回傳同序 [lat,lng]
+    if (!isearr(pt)) return null
+    return pt
 }
 
 
@@ -109,7 +114,9 @@ export function findPointById(pointSets, targetId) {
     let foundPt = null; let foundPs = null; let foundPsIndex = -1
     each(pointSets, (ps, kps) => {
         each(ps.points, (pt) => {
-            if (pt.id === targetId) { foundPt = pt; foundPs = ps; foundPsIndex = kps; return false }
+            if (pt.id === targetId) {
+                foundPt = pt; foundPs = ps; foundPsIndex = kps; return false
+            }
         })
         if (foundPt) return false
     })
