@@ -165,8 +165,8 @@
             <!-- point tooltip -->
             <div ref="refPointTooltip">
                 <slot name="point-tooltip"
-                    :point="activePoint"
-                    :pointSet="activePointSet"
+                    :point="activePointTooltip"
+                    :pointSet="activePointSetTooltip"
                 ></slot>
             </div>
             <!-- polyline popup -->
@@ -181,7 +181,7 @@
             <!-- polyline tooltip -->
             <div ref="refPolylineTooltip">
                 <slot name="polyline-tooltip"
-                    :polylineSet="activePolylineSet"
+                    :polylineSet="activePolylineSetTooltip"
                     :polylineSets="polylineSets"
                 ></slot>
             </div>
@@ -197,7 +197,7 @@
             <!-- polygon tooltip -->
             <div ref="refPolygonTooltip">
                 <slot name="polygon-tooltip"
-                    :polygonSet="activePolygonSet"
+                    :polygonSet="activePolygonSetTooltip"
                     :polygonSets="polygonSets"
                 ></slot>
             </div>
@@ -213,7 +213,7 @@
             <!-- geojson tooltip -->
             <div ref="refGeojsonTooltip">
                 <slot name="geojson-tooltip"
-                    :geojsonSet="activeGeojsonSet"
+                    :geojsonSet="activeGeojsonSetTooltip"
                     :geojsonSets="geojsonSets"
                 ></slot>
             </div>
@@ -229,7 +229,7 @@
             <!-- contour tooltip -->
             <div ref="refContourTooltip">
                 <slot name="contour-tooltip"
-                    :contourSet="activeContourSet"
+                    :contourSet="activeContourSetTooltip"
                     :contourSets="contourSets"
                 ></slot>
             </div>
@@ -390,6 +390,13 @@ export default {
             activeContourSet: {},
             activePoint: {},
             activePointSet: {},
+            //tooltip 專屬 active 變數: 與 popup 分離, 避免 hover 圖徵時 tooltip setter 連帶重繪已開 popup 的活元素
+            activePolylineSetTooltip: {},
+            activePolygonSetTooltip: {},
+            activeGeojsonSetTooltip: {},
+            activeContourSetTooltip: {},
+            activePointTooltip: {},
+            activePointSetTooltip: {},
 
             baseMapsDataTemp: [],
             contourSubCounts: {}, // { [kcs]: Number } 等值線子層數量追蹤
@@ -887,7 +894,7 @@ export default {
                             }
                         }
                     }
-                    vo.activePoint = ptData; vo.activePointSet = psData
+                    vo.activePointTooltip = ptData; vo.activePointSetTooltip = psData
                     vo.$nextTick(() => {
                         let refEl = vo.$refs.refPointTooltip; if (!refEl) return
                         let html = refEl.innerHTML.trim(); if (!html) return
@@ -1120,7 +1127,7 @@ export default {
                     })
                 },
                 onContourEnter: (e, cs, kcs) => {
-                    vo.activeContourSet = cs
+                    vo.activeContourSetTooltip = cs
                     vo.$nextTick(() => {
                         let el = vo.$refs.refContourTooltip; if (!el) return
                         let html = el.innerHTML.trim(); if (!html) return
@@ -1188,9 +1195,9 @@ export default {
 
         showFeatureTooltip(lngLat, featureData, type, setIndex) {
             let vo = this
-            if (type === 'polyline') vo.activePolylineSet = featureData
-            else if (type === 'polygon') vo.activePolygonSet = featureData
-            else if (type === 'geojson') vo.activeGeojsonSet = featureData
+            if (type === 'polyline') vo.activePolylineSetTooltip = featureData
+            else if (type === 'polygon') vo.activePolygonSetTooltip = featureData
+            else if (type === 'geojson') vo.activeGeojsonSetTooltip = featureData
             vo.$nextTick(() => {
                 let refName = type === 'polyline' ? 'refPolylineTooltip' : type === 'polygon' ? 'refPolygonTooltip' : 'refGeojsonTooltip'
                 let el = vo.$refs[refName]; if (!el) return
