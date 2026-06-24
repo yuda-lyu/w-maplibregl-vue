@@ -60,6 +60,10 @@
 
             <AppBSCDisplayOrderByType v-if="showSubCmp==='displayOrderByType'"></AppBSCDisplayOrderByType>
 
+            <AppPopupPosition v-if="showSubCmp==='popupPosition'"></AppPopupPosition>
+
+            <AppPopupResize v-if="showSubCmp==='popupResize'"></AppPopupResize>
+
             <AppPBMShow v-if="showSubCmp==='panelBaseMaps.show'"></AppPBMShow>
 
             <AppPBMBaseMaps v-if="showSubCmp==='panelBaseMaps.baseMaps'"></AppPBMBaseMaps>
@@ -287,6 +291,8 @@ import AppBSCCenter from './AppBSCCenter.vue'
 import AppBSCZoom from './AppBSCZoom.vue'
 import AppBSCPanelBackgroundColor from './AppBSCPanelBackgroundColor.vue'
 import AppBSCDisplayOrderByType from './AppBSCDisplayOrderByType.vue'
+import AppPopupPosition from './AppPopupPosition.vue'
+import AppPopupResize from './AppPopupResize.vue'
 import AppPBMShow from './AppPBMShow.vue'
 import AppPBMBaseMaps from './AppPBMBaseMaps.vue'
 import AppPBMPosition from './AppPBMPosition.vue'
@@ -403,6 +409,8 @@ export default {
         AppBSCZoom,
         AppBSCPanelBackgroundColor,
         AppBSCDisplayOrderByType,
+        AppPopupPosition,
+        AppPopupResize,
         AppPBMShow,
         AppPBMBaseMaps,
         AppPBMPosition,
@@ -652,6 +660,10 @@ export default {
                 image: [
                     'imageSets',
                     'imageSet-upload',
+                ],
+                popup: [
+                    'popupPosition',
+                    'popupResize',
                 ],
                 function: [
                     'function-getMapObject',

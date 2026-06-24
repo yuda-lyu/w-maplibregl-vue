@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>components/CmpPopupResizable.vue - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-CmpPopupResizable.html">CmpPopupResizable</a></li><li><a href="module-WMaplibreglVue.html">WMaplibreglVue</a></li></ul><h3>Global</h3><ul><li><a href="global.html#applyBaseMaps">applyBaseMaps</a></li><li><a href="global.html#applyProjection">applyProjection</a></li><li><a href="global.html#applyTerrain">applyTerrain</a></li><li><a href="global.html#buildContourLegend">buildContourLegend</a></li><li><a href="global.html#buildItemsList">buildItemsList</a></li><li><a href="global.html#buildPanelStyle">buildPanelStyle</a></li><li><a href="global.html#buildPolygonGeometry">buildPolygonGeometry</a></li><li><a href="global.html#calcPanToCenter">calcPanToCenter</a></li><li><a href="global.html#calcPolygonCenter">calcPolygonCenter</a></li><li><a href="global.html#calcPolylineCenter">calcPolylineCenter</a></li><li><a href="global.html#clearTrackedByPrefix">clearTrackedByPrefix</a></li><li><a href="global.html#clearTrackedMarkersByPrefix">clearTrackedMarkersByPrefix</a></li><li><a href="global.html#computeBasicOpt">computeBasicOpt</a></li><li><a href="global.html#computeClusterOpts">computeClusterOpts</a></li><li><a href="global.html#computePanelBaseMaps">computePanelBaseMaps</a></li><li><a href="global.html#computePanelCompass3d">computePanelCompass3d</a></li><li><a href="global.html#computePanelCompassRose">computePanelCompassRose</a></li><li><a href="global.html#computePanelItems">computePanelItems</a></li><li><a href="global.html#computePanelLabels">computePanelLabels</a></li><li><a href="global.html#computePanelLegends">computePanelLegends</a></li><li><a href="global.html#computePanelScale">computePanelScale</a></li><li><a href="global.html#computePanelZoom">computePanelZoom</a></li><li><a href="global.html#countVisible">countVisible</a></li><li><a href="global.html#createDirectionalPopup">createDirectionalPopup</a></li><li><a href="global.html#createMap">createMap</a></li><li><a href="global.html#findPointById">findPointById</a></li><li><a href="global.html#getContourColor">getContourColor</a></li><li><a href="global.html#getMapObject">getMapObject</a></li><li><a href="global.html#isBaseMapsPaintOnlyDiff">isBaseMapsPaintOnlyDiff</a></li><li><a href="global.html#pointInRing">pointInRing</a></li><li><a href="global.html#recheckSinglePopupDir">recheckSinglePopupDir</a></li><li><a href="global.html#registerIconImage">registerIconImage</a></li><li><a href="global.html#removeStaleSetLayers">removeStaleSetLayers</a></li><li><a href="global.html#renderContourSets">renderContourSets</a></li><li><a href="global.html#renderGeojsonSets">renderGeojsonSets</a></li><li><a href="global.html#renderImageSets">renderImageSets</a></li><li><a href="global.html#renderPointSets">renderPointSets</a></li><li><a href="global.html#renderPolygonSets">renderPolygonSets</a></li><li><a href="global.html#renderPolylineSets">renderPolylineSets</a></li><li><a href="global.html#resolveFeatureById">resolveFeatureById</a></li><li><a href="global.html#setOverlayOpacity">setOverlayOpacity</a></li><li><a href="global.html#switchBaseMap">switchBaseMap</a></li><li><a href="global.html#toggleOverlayVisible">toggleOverlayVisible</a></li><li><a href="global.html#updateBaseMapPaint">updateBaseMapPaint</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">components/CmpPopupResizable.vue</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>&lt;template>
+
+    &lt;!-- resizable=false: 純 passthrough, 不加任何尺寸/把手, 行為與未包裝時一致 -->
+    &lt;div v-if="!resizable">
+        &lt;slot>&lt;/slot>
+    &lt;/div>
+
+    &lt;!-- resizable=true: 固定寬高外框 + 八向把手(四邊四角) -->
+    &lt;div v-else :style="`position:relative; width:${useWidth}px; height:${useHeight}px; box-sizing:border-box;`">
+
+        &lt;div class="rpf-handle top" v-if="modes.includes('top')" @mousedown.prevent.stop="startResize('top', $event)">&lt;/div>
+        &lt;div class="rpf-handle bottom" v-if="modes.includes('bottom')" @mousedown.prevent.stop="startResize('bottom', $event)">&lt;/div>
+        &lt;div class="rpf-handle left" v-if="modes.includes('left')" @mousedown.prevent.stop="startResize('left', $event)">&lt;/div>
+        &lt;div class="rpf-handle right" v-if="modes.includes('right')" @mousedown.prevent.stop="startResize('right', $event)">&lt;/div>
+        &lt;div class="rpf-handle top-left" v-if="modes.includes('top-left')" @mousedown.prevent.stop="startResize('top-left', $event)">&lt;/div>
+        &lt;div class="rpf-handle top-right" v-if="modes.includes('top-right')" @mousedown.prevent.stop="startResize('top-right', $event)">&lt;/div>
+        &lt;div class="rpf-handle bottom-left" v-if="modes.includes('bottom-left')" @mousedown.prevent.stop="startResize('bottom-left', $event)">&lt;/div>
+        &lt;div class="rpf-handle bottom-right" v-if="modes.includes('bottom-right')" @mousedown.prevent.stop="startResize('bottom-right', $event)">&lt;/div>
+
+        &lt;slot>&lt;/slot>
+
+    &lt;/div>
+
+&lt;/template>
+
+&lt;script>
+/**
+ * CmpPopupResizable
+ * 套件內建的「可調整大小 popup 外框」。包在 WMaplibreglVue 的 popup slot 內層,
+ * 由本元件自有尺寸 state(w/h), 以 inline style 寫在自身 root 上。
+ * 拖曳期間 emit('resizing-change', true), 供外層在拖曳中暫停 recheckPopupDirections,
+ * 避免地圖 move 觸發翻轉摧毀正在拖曳的 handler。
+ */
+export default {
+    props: {
+        resizable: { type: Boolean, default: false },
+        resizeModes: { type: Array, default: () => ['top', 'bottom', 'left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'] },
+        minWidth: { type: Number, default: 200 },
+        minHeight: { type: Number, default: 200 },
+        width: { type: Number, default: 400 },
+        height: { type: Number, default: 300 },
+    },
+    data() {
+        return {
+            //尺寸 state(本元件自有), 未拖曳前為 null → 用 props 初始值
+            w: null,
+            h: null,
+            startStats: null,
+            dragAction: null,
+        }
+    },
+    computed: {
+        modes: function() {
+            return this.resizeModes || []
+        },
+        useWidth: function() {
+            return this.w || this.width
+        },
+        useHeight: function() {
+            return this.h || this.height
+        },
+    },
+    methods: {
+
+        startResize: function(dir, e) {
+            let vo = this
+            vo.dragAction = dir
+            vo.startStats = { x: e.clientX, y: e.clientY, w: vo.useWidth, h: vo.useHeight }
+            //依 popup 錨定方向決定縮放增益: 被 maplibre 置中(translate -50%)的軸, 其邊距中心為 size/2,
+            //故拖該軸需 *2 才能讓被拖的邊跟上滑鼠(操作同步感). top/bottom→水平置中; left/right→垂直置中; 角錨定→皆 *1
+            let anchor = ''
+            let pe = (vo.$el &amp;&amp; vo.$el.closest) ? vo.$el.closest('.maplibregl-popup') : null
+            let mm = (pe &amp;&amp; pe.className) ? String(pe.className).match(/maplibregl-popup-anchor-([a-z-]+)/) : null
+            if (mm) {
+                anchor = mm[1]
+            }
+            vo._gainX = (anchor === 'top' || anchor === 'bottom') ? 2 : 1
+            vo._gainY = (anchor === 'left' || anchor === 'right') ? 2 : 1
+            //pending 尺寸(拖曳中直接寫 DOM 用, 非響應式)
+            vo._pendW = vo.useWidth
+            vo._pendH = vo.useHeight
+            //notify: 拖曳開始(外層用以暫停翻轉)
+            vo.$emit('resizing-change', true)
+            window.addEventListener('mousemove', vo.onResize)
+            window.addEventListener('mouseup', vo.stopResize)
+        },
+
+        onResize: function(e) {
+            let vo = this
+            if (!vo.startStats) {
+                return
+            }
+            let dx = e.clientX - vo.startStats.x
+            let dy = e.clientY - vo.startStats.y
+            //八向: 邊與角共用同一套 includes 判斷
+            let nw = vo.startStats.w
+            let nh = vo.startStats.h
+            let d = vo.dragAction
+            let gx = vo._gainX || 1
+            let gy = vo._gainY || 1
+            if (d.includes('right')) {
+                nw += dx * gx
+            }
+            if (d.includes('left')) {
+                nw += dx * -1 * gx
+            }
+            if (d.includes('bottom')) {
+                nh += dy * gy
+            }
+            if (d.includes('top')) {
+                nh += dy * -1 * gy
+            }
+            nw = Math.max(nw, vo.minWidth)
+            nh = Math.max(nh, vo.minHeight)
+            //拖曳中「不」改響應式 w/h(否則每次 mousemove 都重繪 frame 並連帶調和 slot → lag).
+            //改暫存 pending 尺寸 + 用 rAF 直接寫 DOM, 上限 60fps.
+            if (d.includes('left') || d.includes('right')) {
+                vo._pendW = nw
+            }
+            if (d.includes('top') || d.includes('bottom')) {
+                vo._pendH = nh
+            }
+            if (!vo._raf) {
+                vo._raf = window.requestAnimationFrame(() => {
+                    vo._raf = null
+                    let el = vo.$el
+                    if (el &amp;&amp; el.style) {
+                        el.style.width = vo._pendW + 'px'
+                        el.style.height = vo._pendH + 'px'
+                    }
+                })
+            }
+        },
+
+        stopResize: function() {
+            let vo = this
+            if (vo._raf) {
+                window.cancelAnimationFrame(vo._raf)
+                vo._raf = null
+            }
+            //拖曳結束才提交到響應式 state(尺寸持久, 與拖曳中直接寫入的 DOM 尺寸一致)
+            vo.w = vo._pendW
+            vo.h = vo._pendH
+            if (vo.w || vo.h) {
+                vo.$emit('resize', { width: vo.useWidth, height: vo.useHeight })
+            }
+            vo.startStats = null
+            vo.dragAction = null
+            vo.$emit('resizing-change', false)
+            window.removeEventListener('mousemove', vo.onResize)
+            window.removeEventListener('mouseup', vo.stopResize)
+        },
+
+    },
+    beforeDestroy: function() {
+        let vo = this
+        if (vo._raf) {
+            window.cancelAnimationFrame(vo._raf)
+            vo._raf = null
+        }
+        window.removeEventListener('mousemove', vo.onResize)
+        window.removeEventListener('mouseup', vo.stopResize)
+    },
+}
+&lt;/script>
+
+&lt;style scoped>
+.rpf-handle {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.8);
+    z-index: 1000;
+    transition: opacity 0.2s;
+    opacity: 0;
+}
+.rpf-handle:hover,
+.rpf-handle:active { opacity: 1; }
+.rpf-handle.top { top: 0; left: 0; width: 100%; height: 12px; cursor: ns-resize; transform: translateY(-6px); }
+.rpf-handle.bottom { bottom: 0; left: 0; width: 100%; height: 12px; cursor: ns-resize; transform: translateY(6px); }
+.rpf-handle.left { top: 0; left: 0; height: 100%; width: 12px; cursor: ew-resize; transform: translateX(-6px); }
+.rpf-handle.right { top: 0; right: 0; height: 100%; width: 12px; cursor: ew-resize; transform: translateX(6px); }
+.rpf-handle.top-left { top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; transform: translate(-6px, -6px); z-index: 1001; }
+.rpf-handle.top-right { top: 0; right: 0; width: 14px; height: 14px; cursor: nesw-resize; transform: translate(6px, -6px); z-index: 1001; }
+.rpf-handle.bottom-left { bottom: 0; left: 0; width: 14px; height: 14px; cursor: nesw-resize; transform: translate(-6px, 6px); z-index: 1001; }
+.rpf-handle.bottom-right { bottom: 0; right: 0; width: 14px; height: 14px; cursor: nwse-resize; transform: translate(6px, 6px); z-index: 1001; }
+&lt;/style>
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Wed Jun 24 2026 19:16:22 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>
