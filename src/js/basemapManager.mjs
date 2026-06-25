@@ -19,6 +19,26 @@ function fxColorExpr(bm) {
 }
 
 
+// 底圖/疊加層的穩定身分 key: 由內容(type/url/layer/layerType/colorShade/layers)衍生, 不綁陣列索引,
+// 使重排時同一份內容的圖層 ID 不變 → 可用 moveLayer 增量重排, 免整批重抓圖磚.
+function baseMapKey(bm) {
+    let raw = [bm.type, bm.url, bm.layer, bm.layerType, bm.colorShade, bm.layers].map((v) => v == null ? '' : String(v)).join('|')
+    return raw.replace(/[^a-zA-Z0-9]/g, '_')
+}
+
+
+// 全陣列的 key 串列(與陣列同序); 內容完全相同者(罕見)以出現序加尾碼去重
+function baseMapKeys(baseMaps) {
+    let seen = {}
+    let arr = isarr(baseMaps) ? baseMaps : []
+    return arr.map((bm) => {
+        let k = baseMapKey(bm)
+        seen[k] = (seen[k] || 0) + 1
+        return seen[k] > 1 ? `${k}__${seen[k]}` : k
+    })
+}
+
+
 /**
  * 將底圖配置套用到 map（建立 raster/vector/wms source 與 layer）
  * @param {Object} map - MapLibre 地圖實例
@@ -26,8 +46,9 @@ function fxColorExpr(bm) {
  */
 export function applyBaseMaps(map, baseMaps) {
     if (!map) return
+    let keys = baseMapKeys(baseMaps)
     let addBaseMapLayer = (bm, k) => {
-        let srcId = `basemap-src-${k}`; let layerId = `basemap-layer-${k}`
+        let srcId = `basemap-src-${keys[k]}`; let layerId = `basemap-layer-${keys[k]}`
         if (map.getLayer(layerId)) map.removeLayer(layerId)
         if (map.getSource(srcId)) map.removeSource(srcId)
         if (bm.type === 'vector') {
@@ -163,10 +184,11 @@ export function applyTerrain(map, terrainMap, trackedLayerIds) {
  * @param {Number} idx - 選中的底圖索引
  */
 export function switchBaseMap(map, baseMaps, idx) {
+    let keys = baseMapKeys(baseMaps)
     each(baseMaps, (bm, k) => {
         if (!isestr(bm.colorShade)) return
         bm.visible = (k === idx)
-        let id = `basemap-layer-${k}`
+        let id = `basemap-layer-${keys[k]}`
         if (map && map.getLayer(id)) map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
     })
 }
@@ -181,7 +203,7 @@ export function switchBaseMap(map, baseMaps, idx) {
 export function toggleOverlayVisible(map, baseMaps, idx) {
     let bm = get(baseMaps, idx, null); if (!bm) return
     bm.visible = !bm.visible
-    let id = `basemap-layer-${idx}`
+    let id = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
     if (map && map.getLayer(id)) map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
 }
 
@@ -196,7 +218,7 @@ export function toggleOverlayVisible(map, baseMaps, idx) {
 export function setOverlayOpacity(map, baseMaps, idx, val) {
     let bm = get(baseMaps, idx, null); if (!bm) return
     bm.opacity = parseFloat(val)
-    let id = `basemap-layer-${idx}`
+    let id = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
     if (!map || !map.getLayer(id)) return
     if (bm.type === 'vector') {
         let lt = bm.layerType || 'fill'
@@ -214,12 +236,13 @@ export function setOverlayOpacity(map, baseMaps, idx, val) {
  * 就地更新單一底圖 entry 的 paint(顏色/透明度), 不重建 layer/source —
  * 避免重抓圖磚與其他未變更圖層閃爍。供「僅 paint 變更」的快路徑使用。
  * @param {Object} map
- * @param {Object} bm - 單一底圖配置
- * @param {Number} k - 索引
+ * @param {Array} baseMaps - 底圖配置陣列
+ * @param {Number} idx - 索引
  */
-export function updateBaseMapPaint(map, bm, k) {
+export function updateBaseMapPaint(map, baseMaps, idx) {
     if (!map) return
-    let layerId = `basemap-layer-${k}`
+    let bm = get(baseMaps, idx, null); if (!bm) return
+    let layerId = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
     if (!map.getLayer(layerId)) return
     if (bm.type === 'vector') {
         let lt = bm.layerType || 'fill'
@@ -259,4 +282,63 @@ export function isBaseMapsPaintOnlyDiff(prev, next) {
         if (!isEqual(prev[i], next[i])) anyChanged = true
     }
     return anyChanged
+}
+
+
+// 不需重建即可就地處理的欄位: paint(colorFillExtrusion/opacity) 與顯隱(visible)
+const BASEMAP_PAINT_STATE = ['colorFillExtrusion', 'opacity', 'visible']
+
+
+/**
+ * 判斷新舊 baseMaps 是否有「結構性變更」(新增/刪除/url/type/layer/layerType/colorShade 等)。
+ * false → 僅順序/可見性/paint 差異, 可走增量(updateBaseMapsIncremental), 不重建、不重抓圖磚;
+ * true → 有結構性變更, 需完整重套 applyBaseMaps。
+ * @param {Array} prev - 上次套用的 baseMaps
+ * @param {Array} next - 本次 baseMaps
+ * @returns {Boolean}
+ */
+export function isBaseMapsStructuralDiff(prev, next) {
+    if (!isarr(prev) || !isarr(next) || prev.length !== next.length) return true
+    let kp = baseMapKeys(prev); let kn = baseMapKeys(next)
+    if (!isEqual(kp.slice().sort(), kn.slice().sort())) return true //key 集合不同 = 新增/刪除/url/type 變更 → 需重建
+    let mp = new Map()
+    each(prev, (e, i) => mp.set(kp[i], e))
+    for (let i = 0; i < next.length; i++) {
+        let p = mp.get(kn[i]); if (!p) return true
+        if (!isEqual(omit(p, BASEMAP_PAINT_STATE), omit(next[i], BASEMAP_PAINT_STATE))) return true //同 key 但其餘結構欄位有變 → 需重建
+    }
+    return false //只剩順序/可見性/paint 差異 → 可走增量
+}
+
+
+/**
+ * 「僅順序/可見性/paint 變更」時的增量套用: 就地更新 paint 與 visibility,
+ * 並用 moveLayer 將疊加層依新陣列序重排至「資料圖層之下、底圖之上」。
+ * 完全不 remove/add source(不重抓圖磚), 不擾動資料圖層 z-order(無閃爍)。
+ * @param {Object} map
+ * @param {Array} baseMaps - 本次 baseMaps(新順序)
+ */
+export function updateBaseMapsIncremental(map, baseMaps) {
+    if (!map || !isarr(baseMaps)) return
+    let keys = baseMapKeys(baseMaps)
+    // 1) paint 與 visibility 全部就地更新
+    each(baseMaps, (bm, k) => {
+        let id = `basemap-layer-${keys[k]}`
+        if (!map.getLayer(id)) return
+        updateBaseMapPaint(map, baseMaps, k)
+        map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+    })
+    // 2) 疊加層(colorShade 空字串)依陣列序 moveLayer 至首個資料圖層之下; 底圖恆在最底, 不動
+    let dataPrefixes = ['image-', 'contour-', 'polygon-', 'geojson-', 'polyline-', 'point-']
+    let beforeId
+    let style = map.getStyle()
+    if (style && isarr(style.layers)) {
+        let hit = style.layers.find((l) => l && isestr(l.id) && dataPrefixes.some((p) => l.id.indexOf(p) === 0))
+        if (hit) beforeId = hit.id
+    }
+    each(baseMaps, (bm, k) => {
+        if (isestr(bm.colorShade)) return //僅疊加層需重排, 底圖不動
+        let id = `basemap-layer-${keys[k]}`
+        if (map.getLayer(id)) map.moveLayer(id, beforeId)
+    })
 }

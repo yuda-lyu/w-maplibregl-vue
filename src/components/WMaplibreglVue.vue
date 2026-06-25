@@ -311,7 +311,7 @@ import defBaseMaps from '../defBaseMaps.mjs'
 import defTerrainMap from '../defTerrainMap.mjs'
 import uiRes from '../uiRes.mjs'
 import { createMap, applyProjection as _applyProjection } from '../js/mapCore.mjs'
-import { applyBaseMaps, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff } from '../js/basemapManager.mjs'
+import { applyBaseMaps, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
 import { clearTrackedByPrefix, clearTrackedMarkersByPrefix, removeStaleSetLayers, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
 import { createDirectionalPopup, recheckSinglePopupDir, registerIconImage } from '../js/popupManager.mjs'
@@ -889,7 +889,12 @@ export default {
                     if (isBaseMapsPaintOnlyDiff(prevBaseMaps, nextBaseMaps)) {
                         //僅 paint(如 colorFillExtrusion/opacity)變更: 就地 setPaintProperty,
                         //不重建底圖 layer/source → 不重抓圖磚、不影響其他未變更圖層(無閃爍)
-                        each(nextBaseMaps, (bm, k) => updateBaseMapPaint(vo.map, bm, k))
+                        each(nextBaseMaps, (bm, k) => updateBaseMapPaint(vo.map, nextBaseMaps, k))
+                    }
+                    else if (!isBaseMapsStructuralDiff(prevBaseMaps, nextBaseMaps)) {
+                        //僅順序/可見性(可含 paint)變更: 增量套用(setPaintProperty + setLayoutProperty + moveLayer),
+                        //不重建 layer/source → 不重抓圖磚、不擾動資料圖層 z-order(無閃爍)
+                        updateBaseMapsIncremental(vo.map, nextBaseMaps)
                     }
                     else {
                         vo.applyBaseMaps()
