@@ -43,10 +43,11 @@ export function applyBaseMaps(map, baseMaps) {
                     'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['coalesce', ['get', 'render_height'], ['get', 'height'], 0]],
                     'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.05, ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0]],
                     'fill-extrusion-opacity': op,
+                    'fill-extrusion-opacity-transition': { duration: 0, delay: 0 },
                 }
             }
             else if (layerType === 'fill') {
-                paint = { 'fill-color': '#aaaaaa', 'fill-opacity': op }
+                paint = { 'fill-color': '#aaaaaa', 'fill-opacity': op, 'fill-opacity-transition': { duration: 0, delay: 0 } }
             }
             map.addLayer({ 'id': layerId, 'type': layerType, 'source': srcId, 'source-layer': sourceLayer, paint, 'layout': { visibility: bm.visible ? 'visible' : 'none' } })
             return
@@ -64,7 +65,7 @@ export function applyBaseMaps(map, baseMaps) {
         }
         let op = bm.opacity != null ? bm.opacity : 1
         map.addSource(srcId, { type: 'raster', tiles, tileSize: 256 })
-        map.addLayer({ id: layerId, type: 'raster', source: srcId, paint: { 'raster-opacity': op }, layout: { visibility: bm.visible ? 'visible' : 'none' } })
+        map.addLayer({ id: layerId, type: 'raster', source: srcId, paint: { 'raster-opacity': op, 'raster-opacity-transition': { duration: 0, delay: 0 } }, layout: { visibility: bm.visible ? 'visible' : 'none' } })
     }
     // 第一輪：底圖（colorShade 非空），確保先渲染在下方
     each(baseMaps, (bm, k) => {
