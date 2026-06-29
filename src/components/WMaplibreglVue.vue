@@ -1,22 +1,43 @@
 <template>
-    <div ref="root" style="display:inline-block; position:relative;" v-domresize @domresize="resize">
+    <div
+        style="display:inline-block; position:relative;"
+        v-domresize
+        @domresize="resize"
+    >
+
         <!-- 地圖容器 -->
-        <div ref="mapContainer" style="width:100%; height:100%;"></div>
+        <div
+            ref="mapContainer"
+            style="width:100%; height:100%;"
+        ></div>
 
         <!-- 四角面板容器，面板依順序由上往下堆疊，不重疊 -->
-        <div v-for="corner in corners" :key="corner" class="clsCorner" :class="'clsCorner-'+corner">
+        <div
+            class="clsCorner"
+            :class="'clsCorner-'+corner"
+            :key="corner"
+            v-for="corner in corners"
+        >
 
             <!-- 羅盤 -->
-            <div v-if="panelCompassRose.show && panelCompassRose.position===corner"
-                :style="{ order: getPanelOrder('panelCompassRose', corner), padding: panelCompassRose.withPanel ? '3px' : '0', background: panelCompassRose.withPanel ? panelBackgroundColor : 'transparent', borderRadius: '5px' }">
-                <img :src="useIconCompassRose" :style="{ width: panelCompassRose.size+'px', height: panelCompassRose.size+'px', display:'block' }" />
+            <div
+                :style="{ order: getPanelOrder('panelCompassRose', corner), padding: panelCompassRose.withPanel ? '3px' : '0', background: panelCompassRose.withPanel ? panelBackgroundColor : 'transparent', borderRadius: '5px' }"
+                v-if="panelCompassRose.show && panelCompassRose.position===corner"
+            >
+                <img
+                    :style="{ width: panelCompassRose.size+'px', height: panelCompassRose.size+'px', display:'block' }"
+                    :src="useIconCompassRose"
+                />
             </div>
 
             <!-- 3D 指北針（含視角傾斜效果，點擊恢復 2D 正北） -->
-            <div v-if="panelCompass3d.show && panelCompass3d.position===corner"
-                @click="resetTo2d"
+            <div
+                :style="{ order: getPanelOrder('panelCompass3d', corner), cursor:'pointer', display:'inline-block', lineHeight:'0' }"
                 :title="currentPitch > 0 ? 'Click to reset 2D north-up view' : 'Click to face north'"
-                :style="{ order: getPanelOrder('panelCompass3d', corner), cursor:'pointer', display:'inline-block', lineHeight:'0' }">
+                @click="resetTo2d"
+                v-if="panelCompass3d.show && panelCompass3d.position===corner"
+            >
+
                 <div :style="compass3dDiscStyle">
                     <svg :width="panelCompass3d.size" :height="panelCompass3d.size" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
                         <!-- 外圓背景 -->
@@ -35,12 +56,26 @@
                         <circle cx="22" cy="22" r="2.2" fill="rgba(255,255,255,0.85)"/>
                     </svg>
                 </div>
+
             </div>
 
             <!-- 底圖選擇 -->
-            <div v-if="panelBaseMaps.show && panelBaseMaps.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelBaseMaps', corner), background: panelBackgroundColor }">
-                <div :style="{ overflow:'auto', ...panelBaseMaps.style }" @wheel="handleWheel($event, panelBaseMaps)">
-                    <div v-for="(bm, kbm) in panelBaseMaps.baseMaps" :key="'bm:'+kbm" style="padding:2px 0;">
+            <div
+                class="clsPanel"
+                :style="{ order: getPanelOrder('panelBaseMaps', corner), background: panelBackgroundColor }"
+                v-if="panelBaseMaps.show && panelBaseMaps.position===corner"
+            >
+
+                <div
+                    :style="{ overflow:'auto', ...panelBaseMaps.style }"
+                    @wheel="handleWheel($event, panelBaseMaps)"
+                >
+                    <div
+                        :key="'bm:'+kbm"
+                        style="padding:2px 0;"
+                        v-for="(bm, kbm) in panelBaseMaps.baseMaps"
+                    >
+
                         <!-- 底圖（colorShade 非空）：radio 單選 -->
                         <template v-if="bm.colorShade !== ''">
                             <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
@@ -48,6 +83,7 @@
                                 <span>{{ bm.name }}</span>
                             </label>
                         </template>
+
                         <!-- 疊加圖層（colorShade 空字串）：checkbox 多選 + opacity 滑桿 -->
                         <template v-else>
                             <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
@@ -59,14 +95,30 @@
                                 <span>{{ Math.round((bm.opacity != null ? bm.opacity : 1) * 100) }}%</span>
                             </div>
                         </template>
+
                     </div>
                 </div>
+
             </div>
 
             <!-- 圖層顯隱 -->
-            <div v-if="panelItems.show && items.length>0 && panelItems.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelItems', corner), background: panelBackgroundColor }">
-                <div :style="{ overflow:'auto', ...panelItems.style }" @wheel="handleWheel($event, panelItems)">
-                    <div v-for="(item, ki) in items" :key="'item:'+ki" style="padding:2px 0;">
+            <div
+                class="clsPanel"
+                :style="{ order: getPanelOrder('panelItems', corner), background: panelBackgroundColor }"
+                v-if="panelItems.show && items.length>0 && panelItems.position===corner"
+            >
+
+                <div
+                    :style="{ overflow:'auto', ...panelItems.style }"
+                    @wheel="handleWheel($event, panelItems)"
+                >
+
+                    <div
+                        :key="'item:'+ki"
+                        style="padding:2px 0;"
+                        v-for="(item, ki) in items"
+                    >
+
                         <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
                             <input type="checkbox" :checked="item.visible" @change="toggleItemVisible(ki)" />
                             <span style="display:inline-flex; flex-direction:column; gap:1px;">
@@ -74,12 +126,20 @@
                                 <span v-if="item.msg" style="font-size:0.7rem; color:#888; font-weight:normal; white-space:pre-wrap;">{{ item.msg }}</span>
                             </span>
                         </label>
+
                     </div>
+
                 </div>
+
             </div>
 
             <!-- 地圖資訊（經緯度/縮放） -->
-            <div v-if="panelLabels.show && panelLabels.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelLabels', corner), background: panelBackgroundColor }">
+            <div
+                class="clsPanel"
+                :style="{ order: getPanelOrder('panelLabels', corner), background: panelBackgroundColor }"
+                v-if="panelLabels.show && panelLabels.position===corner"
+            >
+
                 <div :style="{ overflow:'auto', ...panelLabels.style }">
                     <template v-if="panelLabels.title !== ''">
                         <div style="font-size:1.1rem; font-weight:bold; text-align:center;">{{ panelLabels.title }}</div>
@@ -92,17 +152,26 @@
                         </tr>
                     </tbody></table>
                 </div>
+
             </div>
 
             <!-- 縮放按鈕 -->
-            <div v-if="panelZoom.show && panelZoom.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelZoom', corner), padding: '0' }">
+            <div
+                class="clsPanel"
+                :style="{ order: getPanelOrder('panelZoom', corner), padding: '0' }"
+                v-if="panelZoom.show && panelZoom.position===corner"
+            >
                 <button class="clsZoomBtn" @click="zoomIn" title="放大">+</button>
                 <div style="border-top:1px solid #ccc;"></div>
                 <button class="clsZoomBtn" @click="zoomOut" title="縮小">−</button>
             </div>
 
             <!-- 比例尺 -->
-            <div v-if="panelScale.show && panelScale.position===corner" class="clsPanel clsScale" :style="{ order: getPanelOrder('panelScale', corner), background: 'rgba(0,0,0,0.6)', color:'#fff' }">
+            <div
+                class="clsPanel clsScale"
+                :style="{ order: getPanelOrder('panelScale', corner), background: 'rgba(0,0,0,0.6)', color:'#fff' }"
+                v-if="panelScale.show && panelScale.position===corner"
+            >
                 <div style="display:flex; align-items:center; gap:4px;">
                     <div style="width:80px; height:3px; background:#fff; border:1px solid #fff;"></div>
                     <span>{{ scaleText }}</span>
@@ -110,43 +179,60 @@
             </div>
 
             <!-- 圖例區（等值線用） -->
-            <div v-if="panelLegends.show && countVisible(contourSets)>0 && panelLegends.position===corner" class="clsPanel" :style="{ order: getPanelOrder('panelLegends', corner), background: panelBackgroundColor }">
-                <div :style="{ display:'flex', alignItems:'flex-start', overflow:'auto', ...panelLegends.style }" @wheel="handleWheel($event, panelLegends)">
-                    <template v-for="(contourSet, kcontourSet) in contourSets">
-                        <div style="white-space:nowrap;" :key="'contourSet:'+kcontourSet" v-if="contourSet.visible">
-                            <div style="padding:4px 6px;">
-                                <div style="margin-bottom:5px;">
-                                    <div style="text-align:center;" v-html="contourSet.title"></div>
-                                    <div style="font-size:0.85rem; text-align:center;" v-html="contourSet.legendMsg"></div>
-                                </div>
-                                <table style="border-collapse:collapse;">
-                                    <tbody>
-                                        <tr :key="'klegend:'+klegend" v-for="(legend, klegend) in contourSet.legend">
-                                            <td style="height:18px; line-height:18px;" v-if="false">
-                                                <span :style="`opacity:${legend.arrow?1:0};`">▶</span>
-                                            </td>
-                                            <td :style="`background:${legend.color}; width:18px; height:18px;`"></td>
-                                            <td style="padding-left:5px;"></td>
-                                            <td style="text-align:right; font-size:0.7rem; height:18px; line-height:18px;">
-                                                <span v-html="legend.low"></span>
-                                            </td>
-                                            <td style="padding:0px 2px; text-align:center; font-size:0.7rem; height:18px; line-height:18px;">
-                                                <span v-html="legend.delimiter"></span>
-                                            </td>
-                                            <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;">
-                                                <span v-html="legend.up"></span>
-                                            </td>
-                                            <td style="padding-left:3px;" v-if="legend.textExt"></td>
-                                            <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;" v-if="legend.textExt">
-                                                <span v-html="legend.textExt"></span>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+            <div
+                class="clsPanel"
+                :style="{ order: getPanelOrder('panelLegends', corner), background: panelBackgroundColor }"
+                v-if="panelLegends.show && countVisible(contourSets)>0 && panelLegends.position===corner"
+            >
+
+                <div
+                    :style="{ display:'flex', alignItems:'flex-start', overflow:'auto', ...panelLegends.style }"
+                    @wheel="handleWheel($event, panelLegends)"
+                >
+
+                    <div
+                        :key="'contourSet:'+kcontourSet"
+                        v-for="(contourSet, kcontourSet) in contourSets"
+                    >
+
+                        <div
+                            style="padding:4px 6px; white-space:nowrap;"
+                            v-if="contourSet.visible"
+                        >
+                            <div style="margin-bottom:5px;">
+                                <div style="text-align:center;" v-html="contourSet.title"></div>
+                                <div style="font-size:0.85rem; text-align:center;" v-html="contourSet.legendMsg"></div>
                             </div>
+                            <table style="border-collapse:collapse;">
+                                <tbody>
+                                    <tr :key="'klegend:'+klegend" v-for="(legend, klegend) in contourSet.legend">
+                                        <td style="height:18px; line-height:18px;" v-if="false">
+                                            <span :style="`opacity:${legend.arrow?1:0};`">▶</span>
+                                        </td>
+                                        <td :style="`background:${legend.color}; width:18px; height:18px;`"></td>
+                                        <td style="padding-left:5px;"></td>
+                                        <td style="text-align:right; font-size:0.7rem; height:18px; line-height:18px;">
+                                            <span v-html="legend.low"></span>
+                                        </td>
+                                        <td style="padding:0px 2px; text-align:center; font-size:0.7rem; height:18px; line-height:18px;">
+                                            <span v-html="legend.delimiter"></span>
+                                        </td>
+                                        <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;">
+                                            <span v-html="legend.up"></span>
+                                        </td>
+                                        <td style="padding-left:3px;" v-if="legend.textExt"></td>
+                                        <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;" v-if="legend.textExt">
+                                            <span v-html="legend.textExt"></span>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-                    </template>
+
+                    </div>
+
                 </div>
+
             </div>
 
         </div>
