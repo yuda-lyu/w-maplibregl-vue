@@ -1,232 +1,238 @@
 <template>
     <div
-        style="display:inline-block; position:relative;"
+        style="position:relative; display:inline-block;"
         v-domresize
         @domresize="resize"
+        :loading="loading"
     >
 
-        <!-- 地圖容器 -->
+        <!-- 圖台區 -->
         <div
-            ref="mapContainer"
+            ref="panel"
             style="width:100%; height:100%;"
         ></div>
 
-        <!-- 四角面板容器，面板依順序由上往下堆疊，不重疊 -->
-        <div
-            class="clsCorner"
-            :class="'clsCorner-'+corner"
-            :key="corner"
-            v-for="corner in corners"
-        >
+        <!-- 輔助區 -->
+        <div v-if="!loading">
 
-            <!-- 羅盤 -->
+            <!-- 四角面板容器，面板依順序由上往下堆疊，不重疊 -->
             <div
-                :style="{ order: getPanelOrder('panelCompassRose', corner), padding: panelCompassRose.withPanel ? '3px' : '0', background: panelCompassRose.withPanel ? panelBackgroundColor : 'transparent', borderRadius: '5px' }"
-                v-if="panelCompassRose.show && panelCompassRose.position===corner"
-            >
-                <img
-                    :style="{ width: panelCompassRose.size+'px', height: panelCompassRose.size+'px', display:'block' }"
-                    :src="useIconCompassRose"
-                />
-            </div>
-
-            <!-- 3D 指北針（含視角傾斜效果，點擊恢復 2D 正北） -->
-            <div
-                :style="{ order: getPanelOrder('panelCompass3d', corner), cursor:'pointer', display:'inline-block', lineHeight:'0' }"
-                :title="currentPitch > 0 ? 'Click to reset 2D north-up view' : 'Click to face north'"
-                @click="resetTo2d"
-                v-if="panelCompass3d.show && panelCompass3d.position===corner"
+                class="clsCorner"
+                :class="'clsCorner-'+corner"
+                :key="corner"
+                v-for="corner in corners"
             >
 
-                <div :style="compass3dDiscStyle">
-                    <svg :width="panelCompass3d.size" :height="panelCompass3d.size" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-                        <!-- 外圓背景 -->
-                        <circle cx="22" cy="22" r="21" fill="rgba(20,20,20,0.78)" stroke="rgba(255,255,255,1)" stroke-width="1"/>
-                        <!-- 旋轉群組：指針依 bearing 旋轉 -->
-                        <g :transform="`rotate(${-currentBearing}, 22, 22)`">
-                            <!-- 北方指針（紅色） -->
-                            <polygon points="22,4 18.5,22 22,19.5 25.5,22" fill="#e84040"/>
-                            <!-- 南方指針（灰色） -->
-                            <polygon points="22,40 18.5,22 22,24.5 25.5,22" fill="#999999"/>
-                            <!-- 東西刻度短線 -->
-                            <line x1="4" y1="22" x2="7" y2="22" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
-                            <line x1="37" y1="22" x2="40" y2="22" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
-                        </g>
-                        <!-- 中心圓點 -->
-                        <circle cx="22" cy="22" r="2.2" fill="rgba(255,255,255,0.85)"/>
-                    </svg>
+                <!-- 羅盤 -->
+                <div
+                    :style="{ order: getPanelOrder('panelCompassRose', corner), padding: panelCompassRose.withPanel ? '3px' : '0', background: panelCompassRose.withPanel ? panelBackgroundColor : 'transparent', borderRadius: '5px' }"
+                    v-if="panelCompassRose.show && panelCompassRose.position===corner"
+                >
+                    <img
+                        :style="{ width: panelCompassRose.size+'px', height: panelCompassRose.size+'px', display:'block' }"
+                        :src="useIconCompassRose"
+                    />
                 </div>
 
-            </div>
-
-            <!-- 底圖選擇 -->
-            <div
-                class="clsPanel"
-                :style="{ order: getPanelOrder('panelBaseMaps', corner), background: panelBackgroundColor }"
-                v-if="panelBaseMaps.show && panelBaseMaps.position===corner"
-            >
-
+                <!-- 3D 指北針（含視角傾斜效果，點擊恢復 2D 正北） -->
                 <div
-                    :style="{ overflow:'auto', ...panelBaseMaps.style }"
-                    @wheel="handleWheel($event, panelBaseMaps)"
-                >
-                    <div
-                        :key="'bm:'+kbm"
-                        style="padding:2px 0;"
-                        v-for="(bm, kbm) in panelBaseMaps.baseMaps"
-                    >
-
-                        <!-- 底圖（colorShade 非空）：radio 單選 -->
-                        <template v-if="bm.colorShade !== ''">
-                            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
-                                <input type="radio" :name="'bmr_'+_uid" :checked="bm.visible" @change="switchBaseMap(kbm)" />
-                                <span>{{ bm.name }}</span>
-                            </label>
-                        </template>
-
-                        <!-- 疊加圖層（colorShade 空字串）：checkbox 多選 + opacity 滑桿 -->
-                        <template v-else>
-                            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
-                                <input type="checkbox" :checked="bm.visible" @change="toggleOverlayVisible(kbm)" />
-                                <span>{{ bm.name }}</span>
-                            </label>
-                            <div style="display:flex; align-items:center; gap:4px; padding-left:20px; padding-top:2px; font-size:0.75rem;">
-                                <input type="range" min="0" max="1" step="0.01" :value="bm.opacity != null ? bm.opacity : 1" :disabled="!bm.visible" @input="setOverlayOpacity(kbm, $event.target.value)" style="width:70px;" />
-                                <span>{{ Math.round((bm.opacity != null ? bm.opacity : 1) * 100) }}%</span>
-                            </div>
-                        </template>
-
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- 圖層顯隱 -->
-            <div
-                class="clsPanel"
-                :style="{ order: getPanelOrder('panelItems', corner), background: panelBackgroundColor }"
-                v-if="panelItems.show && items.length>0 && panelItems.position===corner"
-            >
-
-                <div
-                    :style="{ overflow:'auto', ...panelItems.style }"
-                    @wheel="handleWheel($event, panelItems)"
+                    :style="{ order: getPanelOrder('panelCompass3d', corner), cursor:'pointer', display:'inline-block', lineHeight:'0' }"
+                    :title="currentPitch > 0 ? 'Click to reset 2D north-up view' : 'Click to face north'"
+                    @click="resetTo2d"
+                    v-if="panelCompass3d.show && panelCompass3d.position===corner"
                 >
 
-                    <div
-                        :key="'item:'+ki"
-                        style="padding:2px 0;"
-                        v-for="(item, ki) in items"
-                    >
-
-                        <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
-                            <input type="checkbox" :checked="item.visible" @change="toggleItemVisible(ki)" />
-                            <span style="display:inline-flex; flex-direction:column; gap:1px;">
-                                <span>{{ item.name }}</span>
-                                <span v-if="item.msg" style="font-size:0.7rem; color:#888; font-weight:normal; white-space:pre-wrap;">{{ item.msg }}</span>
-                            </span>
-                        </label>
-
+                    <div :style="compass3dDiscStyle">
+                        <svg :width="panelCompass3d.size" :height="panelCompass3d.size" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+                            <!-- 外圓背景 -->
+                            <circle cx="22" cy="22" r="21" fill="rgba(20,20,20,0.78)" stroke="rgba(255,255,255,1)" stroke-width="1"/>
+                            <!-- 旋轉群組：指針依 bearing 旋轉 -->
+                            <g :transform="`rotate(${-currentBearing}, 22, 22)`">
+                                <!-- 北方指針（紅色） -->
+                                <polygon points="22,4 18.5,22 22,19.5 25.5,22" fill="#e84040"/>
+                                <!-- 南方指針（灰色） -->
+                                <polygon points="22,40 18.5,22 22,24.5 25.5,22" fill="#999999"/>
+                                <!-- 東西刻度短線 -->
+                                <line x1="4" y1="22" x2="7" y2="22" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+                                <line x1="37" y1="22" x2="40" y2="22" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+                            </g>
+                            <!-- 中心圓點 -->
+                            <circle cx="22" cy="22" r="2.2" fill="rgba(255,255,255,0.85)"/>
+                        </svg>
                     </div>
 
                 </div>
 
-            </div>
-
-            <!-- 地圖資訊（經緯度/縮放） -->
-            <div
-                class="clsPanel"
-                :style="{ order: getPanelOrder('panelLabels', corner), background: panelBackgroundColor }"
-                v-if="panelLabels.show && panelLabels.position===corner"
-            >
-
-                <div :style="{ overflow:'auto', ...panelLabels.style }">
-                    <template v-if="panelLabels.title !== ''">
-                        <div style="font-size:1.1rem; font-weight:bold; text-align:center;">{{ panelLabels.title }}</div>
-                        <div style="border-top:1px solid #b9b9b9; margin:4px 0;"></div>
-                    </template>
-                    <table><tbody>
-                        <tr v-for="(u, ku) in panelLabels.useItems" :key="ku">
-                            <td style="text-align:right;">{{ panelLabels[u] }}</td><td> : </td>
-                            <td>{{ u==='lng'||u==='lat' ? showLoc[u] : u==='zoom' ? Math.max(0, Math.round(currentZoom*1e5)/1e5) : '' }}</td>
-                        </tr>
-                    </tbody></table>
-                </div>
-
-            </div>
-
-            <!-- 縮放按鈕 -->
-            <div
-                class="clsPanel"
-                :style="{ order: getPanelOrder('panelZoom', corner), padding: '0' }"
-                v-if="panelZoom.show && panelZoom.position===corner"
-            >
-                <button class="clsZoomBtn" @click="zoomIn" title="放大">+</button>
-                <div style="border-top:1px solid #ccc;"></div>
-                <button class="clsZoomBtn" @click="zoomOut" title="縮小">−</button>
-            </div>
-
-            <!-- 比例尺 -->
-            <div
-                class="clsPanel clsScale"
-                :style="{ order: getPanelOrder('panelScale', corner), background: 'rgba(0,0,0,0.6)', color:'#fff' }"
-                v-if="panelScale.show && panelScale.position===corner"
-            >
-                <div style="display:flex; align-items:center; gap:4px;">
-                    <div style="width:80px; height:3px; background:#fff; border:1px solid #fff;"></div>
-                    <span>{{ scaleText }}</span>
-                </div>
-            </div>
-
-            <!-- 圖例區（等值線用） -->
-            <div
-                class="clsPanel"
-                :style="{ order: getPanelOrder('panelLegends', corner), background: panelBackgroundColor }"
-                v-if="panelLegends.show && countVisible(contourSets)>0 && panelLegends.position===corner"
-            >
-
+                <!-- 底圖選擇 -->
                 <div
-                    :style="{ display:'flex', alignItems:'flex-start', overflow:'auto', ...panelLegends.style }"
-                    @wheel="handleWheel($event, panelLegends)"
+                    class="clsPanel"
+                    :style="{ order: getPanelOrder('panelBaseMaps', corner), background: panelBackgroundColor }"
+                    v-if="panelBaseMaps.show && panelBaseMaps.position===corner"
                 >
 
                     <div
-                        :key="'contourSet:'+kcontourSet"
-                        v-for="(contourSet, kcontourSet) in contourSets"
+                        :style="{ overflow:'auto', ...panelBaseMaps.style }"
+                        @wheel="handleWheel($event, panelBaseMaps)"
+                    >
+                        <div
+                            :key="'bm:'+kbm"
+                            style="padding:2px 0;"
+                            v-for="(bm, kbm) in panelBaseMaps.baseMaps"
+                        >
+
+                            <!-- 底圖（colorShade 非空）：radio 單選 -->
+                            <template v-if="bm.colorShade !== ''">
+                                <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
+                                    <input type="radio" :name="'bmr_'+_uid" :checked="bm.visible" @change="switchBaseMap(kbm)" />
+                                    <span>{{ bm.name }}</span>
+                                </label>
+                            </template>
+
+                            <!-- 疊加圖層（colorShade 空字串）：checkbox 多選 + opacity 滑桿 -->
+                            <template v-else>
+                                <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
+                                    <input type="checkbox" :checked="bm.visible" @change="toggleOverlayVisible(kbm)" />
+                                    <span>{{ bm.name }}</span>
+                                </label>
+                                <div style="display:flex; align-items:center; gap:4px; padding-left:20px; padding-top:2px; font-size:0.75rem;">
+                                    <input type="range" min="0" max="1" step="0.01" :value="bm.opacity != null ? bm.opacity : 1" :disabled="!bm.visible" @input="setOverlayOpacity(kbm, $event.target.value)" style="width:70px;" />
+                                    <span>{{ Math.round((bm.opacity != null ? bm.opacity : 1) * 100) }}%</span>
+                                </div>
+                            </template>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- 圖層顯隱 -->
+                <div
+                    class="clsPanel"
+                    :style="{ order: getPanelOrder('panelItems', corner), background: panelBackgroundColor }"
+                    v-if="panelItems.show && items.length>0 && panelItems.position===corner"
+                >
+
+                    <div
+                        :style="{ overflow:'auto', ...panelItems.style }"
+                        @wheel="handleWheel($event, panelItems)"
                     >
 
                         <div
-                            style="padding:4px 6px; white-space:nowrap;"
-                            v-if="contourSet.visible"
+                            :key="'item:'+ki"
+                            style="padding:2px 0;"
+                            v-for="(item, ki) in items"
                         >
-                            <div style="margin-bottom:5px;">
-                                <div style="text-align:center;" v-html="contourSet.title"></div>
-                                <div style="font-size:0.85rem; text-align:center;" v-html="contourSet.legendMsg"></div>
+
+                            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-size:0.8rem;">
+                                <input type="checkbox" :checked="item.visible" @change="toggleItemVisible(ki)" />
+                                <span style="display:inline-flex; flex-direction:column; gap:1px;">
+                                    <span>{{ item.name }}</span>
+                                    <span v-if="item.msg" style="font-size:0.7rem; color:#888; font-weight:normal; white-space:pre-wrap;">{{ item.msg }}</span>
+                                </span>
+                            </label>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- 地圖資訊（經緯度/縮放） -->
+                <div
+                    class="clsPanel"
+                    :style="{ order: getPanelOrder('panelLabels', corner), background: panelBackgroundColor }"
+                    v-if="panelLabels.show && panelLabels.position===corner"
+                >
+
+                    <div :style="{ overflow:'auto', ...panelLabels.style }">
+                        <template v-if="panelLabels.title !== ''">
+                            <div style="font-size:1.1rem; font-weight:bold; text-align:center;">{{ panelLabels.title }}</div>
+                            <div style="border-top:1px solid #b9b9b9; margin:4px 0;"></div>
+                        </template>
+                        <table><tbody>
+                            <tr v-for="(u, ku) in panelLabels.useItems" :key="ku">
+                                <td style="text-align:right;">{{ panelLabels[u] }}</td><td> : </td>
+                                <td>{{ u==='lng'||u==='lat' ? showLoc[u] : u==='zoom' ? Math.max(0, Math.round(currentZoom*1e5)/1e5) : '' }}</td>
+                            </tr>
+                        </tbody></table>
+                    </div>
+
+                </div>
+
+                <!-- 縮放按鈕 -->
+                <div
+                    class="clsPanel"
+                    :style="{ order: getPanelOrder('panelZoom', corner), padding: '0' }"
+                    v-if="panelZoom.show && panelZoom.position===corner"
+                >
+                    <button class="clsZoomBtn" @click="zoomIn" title="放大">+</button>
+                    <div style="border-top:1px solid #ccc;"></div>
+                    <button class="clsZoomBtn" @click="zoomOut" title="縮小">−</button>
+                </div>
+
+                <!-- 比例尺 -->
+                <div
+                    class="clsPanel clsScale"
+                    :style="{ order: getPanelOrder('panelScale', corner), background: 'rgba(0,0,0,0.6)', color:'#fff' }"
+                    v-if="panelScale.show && panelScale.position===corner"
+                >
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <div style="width:80px; height:3px; background:#fff; border:1px solid #fff;"></div>
+                        <span>{{ scaleText }}</span>
+                    </div>
+                </div>
+
+                <!-- 圖例區（等值線用） -->
+                <div
+                    class="clsPanel"
+                    :style="{ order: getPanelOrder('panelLegends', corner), background: panelBackgroundColor }"
+                    v-if="panelLegends.show && countVisible(contourSets)>0 && panelLegends.position===corner"
+                >
+
+                    <div
+                        :style="{ display:'flex', alignItems:'flex-start', overflow:'auto', ...panelLegends.style }"
+                        @wheel="handleWheel($event, panelLegends)"
+                    >
+
+                        <div
+                            :key="'contourSet:'+kcontourSet"
+                            v-for="(contourSet, kcontourSet) in contourSets"
+                        >
+
+                            <div
+                                style="padding:4px 6px; white-space:nowrap;"
+                                v-if="contourSet.visible"
+                            >
+                                <div style="margin-bottom:5px;">
+                                    <div style="text-align:center;" v-html="contourSet.title"></div>
+                                    <div style="font-size:0.85rem; text-align:center;" v-html="contourSet.legendMsg"></div>
+                                </div>
+                                <table style="border-collapse:collapse;">
+                                    <tbody>
+                                        <tr :key="'klegend:'+klegend" v-for="(legend, klegend) in contourSet.legend">
+                                            <td style="height:18px; line-height:18px;" v-if="false">
+                                                <span :style="`opacity:${legend.arrow?1:0};`">▶</span>
+                                            </td>
+                                            <td :style="`background:${legend.color}; width:18px; height:18px;`"></td>
+                                            <td style="padding-left:5px;"></td>
+                                            <td style="text-align:right; font-size:0.7rem; height:18px; line-height:18px;">
+                                                <span v-html="legend.low"></span>
+                                            </td>
+                                            <td style="padding:0px 2px; text-align:center; font-size:0.7rem; height:18px; line-height:18px;">
+                                                <span v-html="legend.delimiter"></span>
+                                            </td>
+                                            <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;">
+                                                <span v-html="legend.up"></span>
+                                            </td>
+                                            <td style="padding-left:3px;" v-if="legend.textExt"></td>
+                                            <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;" v-if="legend.textExt">
+                                                <span v-html="legend.textExt"></span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
-                            <table style="border-collapse:collapse;">
-                                <tbody>
-                                    <tr :key="'klegend:'+klegend" v-for="(legend, klegend) in contourSet.legend">
-                                        <td style="height:18px; line-height:18px;" v-if="false">
-                                            <span :style="`opacity:${legend.arrow?1:0};`">▶</span>
-                                        </td>
-                                        <td :style="`background:${legend.color}; width:18px; height:18px;`"></td>
-                                        <td style="padding-left:5px;"></td>
-                                        <td style="text-align:right; font-size:0.7rem; height:18px; line-height:18px;">
-                                            <span v-html="legend.low"></span>
-                                        </td>
-                                        <td style="padding:0px 2px; text-align:center; font-size:0.7rem; height:18px; line-height:18px;">
-                                            <span v-html="legend.delimiter"></span>
-                                        </td>
-                                        <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;">
-                                            <span v-html="legend.up"></span>
-                                        </td>
-                                        <td style="padding-left:3px;" v-if="legend.textExt"></td>
-                                        <td style="text-align:left; font-size:0.7rem; height:18px; line-height:18px;" v-if="legend.textExt">
-                                            <span v-html="legend.textExt"></span>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+
                         </div>
 
                     </div>
@@ -593,16 +599,23 @@ const defPanelsOrder = ['panelBaseMaps', 'panelLabels', 'panelScale', 'panelComp
  * @vue-prop {Object} [opt.imageSets[i].image={}] 輸入第i個影像集合的影像來源物件，含url(影像連結字串)與lngMin/lngMax/latMin/latMax(四至經緯度數字)，預設{}
  */
 export default {
-    directives: { domresize: domResize() },
-    components: { CmpPopupResizable },
+    directives: {
+        domresize: domResize(),
+    },
+    components: {
+        CmpPopupResizable,
+    },
     props: {
         opt: {
             type: Object,
-            default: () => ({})
-        }
+            default: () => ({}),
+        },
     },
     data() {
         return {
+
+            loading: true,
+
             map: null,
             corners: ['topleft', 'topright', 'bottomleft', 'bottomright'],
 
@@ -755,6 +768,7 @@ export default {
         },
     },
     computed: {
+
         /** 依底圖色調選擇羅盤圖標 */
         useIconCompassRose() {
             let p = this.panelCompassRose
@@ -762,6 +776,7 @@ export default {
             if (p.withPanel) return p.iconSrcDark
             return this.baseMapColorShade === 'dark' ? p.iconSrcLight : p.iconSrcDark
         },
+
         /** 當前可見底圖的色調 */
         baseMapColorShade() {
             let shade = ''
@@ -772,6 +787,7 @@ export default {
             })
             return shade
         },
+
         /** 比例尺文字 */
         scaleText() {
             let lat = this.currentCenter[0] || 23.5
@@ -779,6 +795,7 @@ export default {
             let d = mpp * 80
             return d >= 1000 ? Math.round(d / 1000) + ' km' : Math.round(d) + ' m'
         },
+
         /** 3D指北針：模擬俯視角傾斜效果的 CSS transform */
         compass3dDiscStyle() {
             let tilt = Math.min(this.currentPitch * 0.72, 52)
@@ -789,6 +806,7 @@ export default {
                 transformOrigin: 'center center',
             }
         },
+
         /** popup 可調大小設定(讀 opt.popupResize, 給預設) */
         popupResizeCfg() {
             let c = get(this.opt, 'popupResize', {})
@@ -801,6 +819,7 @@ export default {
                 height: isNumber(c.height) ? c.height : 300,
             }
         },
+
     },
     methods: {
 
@@ -808,7 +827,9 @@ export default {
 
         initMap() {
             let vo = this
-            vo.map = createMap(vo.$refs.mapContainer, vo.opt)
+            vo.loading = true
+            vo.$emit('loading', true)
+            vo.map = createMap(vo.$refs.panel, vo.opt)
             vo.currentZoom = vo.map.getZoom()
 
             vo.map.on('load', () => {
@@ -818,6 +839,10 @@ export default {
                 vo.applyTerrain()
                 vo.ensureDataProcessed()
                 vo.applyAllDataLayers()
+                vo.map.once('idle', () => {
+                    vo.loading = false
+                    vo.$emit('loading', false)
+                })
             })
             vo.map.on('mousemove', (e) => {
                 vo.showLoc = { lat: dig(e.lngLat.lat, 7), lng: dig(e.lngLat.lng, 7) }
