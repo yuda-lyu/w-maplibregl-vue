@@ -895,11 +895,27 @@ export default {
             applyTerrain(this.map, this.terrainMap, this.trackedLayerIds)
         },
 
+        // 將執行期底圖的顯隱/透明度寫回 opt。
+        // opt 有給 baseMaps 時，computePanelBaseMaps 一律以原始 opt 的 baseMaps 為準；
+        // 而元件自身於 moveend/zoomend 會改動 opt.center/opt.zoom，經 deep watcher 觸發重推，
+        // 若未寫回，重推就會以原始 opt 的 visible/opacity 覆寫，使使用者的底圖選取被還原。
+        syncBaseMapsToOpt() {
+            let vo = this
+            let optBaseMaps = get(vo, 'opt.panelBaseMaps.baseMaps', null)
+            if (!isearr(optBaseMaps)) return //opt 未給 baseMaps 時 computePanelBaseMaps 本就沿用執行期狀態，無須寫回
+            each(get(vo, 'panelBaseMaps.baseMaps', []), (bm, k) => {
+                let obm = get(optBaseMaps, k, null); if (!isobj(obm)) return
+                vo.$set(obm, 'visible', bm.visible)
+                if (isNumber(bm.opacity)) vo.$set(obm, 'opacity', bm.opacity)
+            })
+        },
+
         switchBaseMap(idx) {
             _switchBaseMap(this.map, this.panelBaseMaps.baseMaps, idx)
             // 同步 baseMapsDataTemp，避免 processPanelBaseMaps 將此 visible 變動誤判為 baseMapsChanged
             // 而觸發 applyBaseMaps()，導致底圖圖層被重新堆疊在資料圖層上方
             this.baseMapsDataTemp = cloneDeep(this.panelBaseMaps.baseMaps)
+            this.syncBaseMapsToOpt()
             this.$forceUpdate()
         },
         toggleOverlayVisible(idx) {
@@ -907,10 +923,13 @@ export default {
             // 同步 baseMapsDataTemp，避免 processPanelBaseMaps 將此 visible 變動誤判為 baseMapsChanged
             // 而觸發 applyBaseMaps()，導致底圖圖層被重新堆疊在資料圖層上方
             this.baseMapsDataTemp = cloneDeep(this.panelBaseMaps.baseMaps)
+            this.syncBaseMapsToOpt()
             this.$forceUpdate()
         },
         setOverlayOpacity(idx, val) {
             _setOverlayOpacity(this.map, this.panelBaseMaps.baseMaps, idx, val)
+            this.baseMapsDataTemp = cloneDeep(this.panelBaseMaps.baseMaps)
+            this.syncBaseMapsToOpt()
             this.$forceUpdate()
         },
 
