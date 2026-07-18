@@ -11,7 +11,7 @@
 //   5. 滑鼠移出至空白處 → cursor 還原、tooltip 消失(等值線樣式還原)
 //   6. (E2E-009) 滑入點後點擊 → point popup 開啟
 //
-// 按鈕全清單比對: 範例頁可點元素 = [子選單項, 地圖 canvas, #btnMutate 按鈕] — 皆有真實點擊/滑入。
+// 按鈕全清單比對: 範例頁可點元素 = [子選單項, 地圖 canvas, #btnMutate, #btnShiftSets] — 皆有真實點擊/滑入。
 // act 全走 user-facing(真實滑鼠移動/點擊); assert 走 user-facing(canvas cursor 樣式,
 // tooltip DOM 文字, popup DOM 文字, 等值線 hover 前後畫面區域像素差異)。
 // 無 i18n 文字差異(範例固定中英標籤), 故單一變體。每個 it() 各自 new browser。
@@ -37,6 +37,8 @@
 //   - E2E-009 hover 後點擊: 滑入 circle 點後原地點擊 → [Point popup] 開啟(hover 不干擾 click)
 //   - E2E-010 runtime 變更: 點 #btnMutate 後折線換色即時生效(區域像素不同);
 //               直接改 opt visible 的多邊形即時隱藏(hover 無 cursor/tooltip); 折線 hover 仍正常
+//   - E2E-011 陣列頭部插入 pointSet(索引位移): 新組可 hover; 位移後原 circle/icon 點
+//               hover tooltip 資料仍正確(無錯置), 點擊 popup 資料正確
 import assert from 'assert'
 import { chromium } from 'playwright'
 import { baseUrl, startServer, waitUntilExist } from './e2e-setup.mjs'
@@ -123,6 +125,18 @@ describe('e2e-hover', function() {
         await hoverAtEmpty()
         await assertCursor('')
         await assertNoTooltip()
+    }
+    //滑入並輪詢至 cursor 變 pointer: 目標可能尚在渲染中(hover 命中測試僅於 mousemove 觸發,
+    //單次移入後光等待不會再觸發), 故每輪重新微移滑鼠直到命中
+    let hoverAtUntilPointer = async (lat, lng, dx = 0, dy = 0) => {
+        let p = latLngToCanvasXY(lat, lng, cbb.width, cbb.height)
+        for (let i = 0; i < 25; i++) {
+            await page.mouse.move(cbb.x + p.x + dx + (i % 2), cbb.y + p.y + dy)
+            await page.waitForTimeout(300)
+            let c = await page.evaluate(() => document.querySelector('.maplibregl-canvas').style.cursor)
+            if (c === 'pointer') return
+        }
+        throw new Error(`hover (${lat},${lng}) 輪詢後 cursor 仍未變 pointer`)
     }
     //擷取指定 canvas 內區域截圖(等到連續兩張相同視為 settle)
     let captureRegionStable = async (clip) => {
@@ -251,6 +265,35 @@ describe('e2e-hover', function() {
         await hoverAt(23.92, 120.88)
         await assertCursor('pointer')
         await assertTooltip('[Polyline tooltip]')
+    })
+
+    it('E2E-011 陣列頭部插入 pointSet: 位移後各組 hover/click 資料仍正確', async function() {
+        await gotoExample()
+        await page.locator('#btnShiftSets').click()
+        //spec: 新頭部組的點渲染完成後可 hover, tooltip 帶其 title(point-head)
+        await hoverAtUntilPointer(24.00, 120.88)
+        await assertTooltip('point-head')
+        //spec: 位移後原 circle 點 hover tooltip 仍為自己的 title(資料未錯置)
+        await hoverAtEmpty()
+        await assertCursor('')
+        await hoverAtUntilPointer(24.08, 120.88)
+        await assertTooltip('point-circle')
+        //spec: 位移後 icon 點 hover 仍正常且資料正確(icon/資料未錯置)
+        await hoverAtEmpty()
+        await assertCursor('')
+        await hoverAtUntilPointer(24.08, 121.12, 0, -15)
+        await assertTooltip('point-icon')
+        //spec: 位移後點群聚組(內容未變, 差異更新下屬「跳過重建」組)hover 仍正常
+        await hoverAtEmpty()
+        await assertCursor('')
+        await hoverAtUntilPointer(24.08, 121.00)
+        //spec: 位移後點擊原 circle 點 → popup 資料正確
+        let p = latLngToCanvasXY(24.08, 120.88, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + p.x, cbb.y + p.y)
+        await waitUntilExist(page, 'popup 帶 point-circle', () => {
+            let el = document.querySelector('.maplibregl-popup-content')
+            return !!el && el.innerText.indexOf('[Point popup]') >= 0 && el.innerText.indexOf('point-circle') >= 0
+        })
     })
 
 })

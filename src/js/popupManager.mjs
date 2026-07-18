@@ -7,6 +7,31 @@ import isarr from 'wsemi/src/isarr.mjs'
 import maplibregl from 'maplibre-gl'
 
 
+//方向 → maplibre Popup anchor/offset 對照(gap 為與錨點間距, anchorOffset 為額外偏移 [dx,dy], 正x=右移/正y=下移)。
+//createDirectionalPopup 與 recheckSinglePopupDir 共用同一份規則, 避免翻轉邏輯雙份漂移
+function buildPosMap(gap, anchorOffset) {
+    let aoX = 0; let aoY = 0
+    if (isarr(anchorOffset) && anchorOffset.length >= 2) {
+        aoX = anchorOffset[0] || 0; aoY = anchorOffset[1] || 0
+    }
+    return {
+        'top': { anchor: 'bottom', offset: [aoX, -gap + aoY] },
+        'bottom': { anchor: 'top', offset: [aoX, gap + aoY] },
+        'left': { anchor: 'right', offset: [-gap + aoX, aoY] },
+        'right': { anchor: 'left', offset: [gap + aoX, aoY] },
+    }
+}
+const flipMap = { 'top': 'bottom', 'bottom': 'top', 'left': 'right', 'right': 'left' }
+//指定方向放置尺寸 elW×elH 的彈窗是否超出容器範圍
+function checkOverflow(dir, proj, cw, ch, elW, elH, gap) {
+    if (dir === 'top') return proj.y - gap - elH < 0
+    if (dir === 'bottom') return proj.y + gap + elH > ch
+    if (dir === 'left') return proj.x - gap - elW < 0
+    if (dir === 'right') return proj.x + gap + elW > cw
+    return false
+}
+
+
 /**
  * 建立方向性彈窗（支援 top/bottom/left/right + 二階段自動翻轉）
  * @param {Object} map - MapLibre 地圖實例
@@ -21,25 +46,7 @@ import maplibregl from 'maplibre-gl'
 export function createDirectionalPopup(map, lngLat, content, position, gap, extraOpts, anchorOffset) {
     if (!map) return null
     gap = isNumber(gap) ? Math.abs(gap) : 5
-    let aoX = 0; let aoY = 0
-    if (isarr(anchorOffset) && anchorOffset.length >= 2) {
-        aoX = anchorOffset[0] || 0; aoY = anchorOffset[1] || 0
-    }
-    let posMap = {
-        'top': { anchor: 'bottom', offset: [aoX, -gap + aoY] },
-        'bottom': { anchor: 'top', offset: [aoX, gap + aoY] },
-        'left': { anchor: 'right', offset: [-gap + aoX, aoY] },
-        'right': { anchor: 'left', offset: [gap + aoX, aoY] },
-    }
-    let flipMap = { 'top': 'bottom', 'bottom': 'top', 'left': 'right', 'right': 'left' }
-
-    let checkOverflow = (dir, projPt, cw, ch, elW, elH) => {
-        if (dir === 'top') return projPt.y - gap - elH < 0
-        if (dir === 'bottom') return projPt.y + gap + elH > ch
-        if (dir === 'left') return projPt.x - gap - elW < 0
-        if (dir === 'right') return projPt.x + gap + elW > cw
-        return false
-    }
+    let posMap = buildPosMap(gap, anchorOffset)
 
     // 第一階段：以預估尺寸決定初始方向
     let chosenPos = position
@@ -47,7 +54,7 @@ export function createDirectionalPopup(map, lngLat, content, position, gap, extr
         let proj = map.project(lngLat)
         let ct = map.getContainer(); let cw = ct.clientWidth; let ch = ct.clientHeight
         let estW = 220; let estH = 160
-        if (checkOverflow(position, proj, cw, ch, estW, estH)) {
+        if (checkOverflow(position, proj, cw, ch, estW, estH, gap)) {
             chosenPos = flipMap[position] || position
         }
     }
@@ -65,9 +72,9 @@ export function createDirectionalPopup(map, lngLat, content, position, gap, extr
             let realW = rect.width; let realH = rect.height
             let proj = map.project(lngLat)
             let ct = map.getContainer(); let cw = ct.clientWidth; let ch = ct.clientHeight
-            if (checkOverflow(chosenPos, proj, cw, ch, realW, realH)) {
+            if (checkOverflow(chosenPos, proj, cw, ch, realW, realH, gap)) {
                 let flipped = flipMap[chosenPos] || chosenPos
-                if (!checkOverflow(flipped, proj, cw, ch, realW, realH)) {
+                if (!checkOverflow(flipped, proj, cw, ch, realW, realH, gap)) {
                     chosenPos = flipped
                     let newPos = posMap[flipped]
                     popup.remove()
@@ -102,18 +109,7 @@ export function recheckSinglePopupDir(map, popup) {
     if (!popup || !popup._dirMeta) return popup
     let meta = popup._dirMeta
     let { lngLat, position, chosenDir, gap, extraOpts, anchorOffset } = meta
-
-    let aoX = 0; let aoY = 0
-    if (isarr(anchorOffset) && anchorOffset.length >= 2) {
-        aoX = anchorOffset[0] || 0; aoY = anchorOffset[1] || 0
-    }
-    let posMap = {
-        'top': { anchor: 'bottom', offset: [aoX, -gap + aoY] },
-        'bottom': { anchor: 'top', offset: [aoX, gap + aoY] },
-        'left': { anchor: 'right', offset: [-gap + aoX, aoY] },
-        'right': { anchor: 'left', offset: [gap + aoX, aoY] },
-    }
-    let flipMap = { 'top': 'bottom', 'bottom': 'top', 'left': 'right', 'right': 'left' }
+    let posMap = buildPosMap(gap, anchorOffset)
 
     try {
         let popupEl = popup.getElement(); if (!popupEl) return popup
@@ -121,23 +117,16 @@ export function recheckSinglePopupDir(map, popup) {
         let elW = rect.width; let elH = rect.height
         let proj = map.project(lngLat)
         let ct = map.getContainer(); let cw = ct.clientWidth; let ch = ct.clientHeight
+        let ovf = (dir) => checkOverflow(dir, proj, cw, ch, elW, elH, gap)
 
-        let checkOverflow = (dir) => {
-            if (dir === 'top') return proj.y - gap - elH < 0
-            if (dir === 'bottom') return proj.y + gap + elH > ch
-            if (dir === 'left') return proj.x - gap - elW < 0
-            if (dir === 'right') return proj.x + gap + elW > cw
-            return false
-        }
-
-        let overflow = checkOverflow(chosenDir)
+        let overflow = ovf(chosenDir)
         let newDir = chosenDir
         if (overflow) {
             let flipped = flipMap[chosenDir]
-            if (!checkOverflow(flipped)) newDir = flipped
+            if (!ovf(flipped)) newDir = flipped
         }
         else if (chosenDir !== position) {
-            if (!checkOverflow(position)) newDir = position
+            if (!ovf(position)) newDir = position
         }
 
         if (newDir === chosenDir) return popup
@@ -165,20 +154,32 @@ export function recheckSinglePopupDir(map, popup) {
  * @param {Number} th - 目標高度
  * @returns {Promise}
  */
+const KEY_ICON_FP = '__wmlgvIconFp'
 export function registerIconImage(map, key, src, tw, th) {
-    if (!map || map.hasImage(key)) return Promise.resolve()
+    if (!map) return Promise.resolve()
+    let fps = map[KEY_ICON_FP]
+    if (!fps) {
+        fps = {}; map[KEY_ICON_FP] = fps
+    }
+    //內容指紋 = 長度 + 頭尾片段 + 目標尺寸(避免整串 base64 常駐記憶體):
+    //同 key 同內容直接沿用; 內容變更則載入後 removeImage 再 addImage 正確替換(免呼叫端先清光 icon 的 workaround)
+    let s = String(src || '')
+    let fp = `${s.length}:${s.slice(0, 64)}:${s.slice(-64)}:${tw}x${th}`
+    if (map.hasImage(key) && fps[key] === fp) return Promise.resolve()
     return new Promise((resolve) => {
         let img = new Image()
         img.crossOrigin = 'anonymous' //跨域圖片須帶 CORS 載入, 否則 canvas 被污染後 getImageData 會 throw
         img.onload = () => {
-            if (!map || map.hasImage(key)) {
+            if (!map || (map.hasImage(key) && fps[key] === fp)) { //並發同內容載入: 先完成者已註冊
                 resolve(); return
             }
             try {
                 let c = document.createElement('canvas'); c.width = tw; c.height = th
                 let ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, tw, th)
                 let d = ctx.getImageData(0, 0, tw, th)
+                if (map.hasImage(key)) map.removeImage(key) //同 key 內容變更: 移除舊圖再註冊
                 map.addImage(key, { width: tw, height: th, data: new Uint8Array(d.data.buffer) })
+                fps[key] = fp
             }
             catch (e) {
                 console.warn('[popupManager] registerIconImage error:', e) //單顆 icon 失敗不可卡住整組渲染

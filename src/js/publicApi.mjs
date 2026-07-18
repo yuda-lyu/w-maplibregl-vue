@@ -19,21 +19,28 @@ import getCentroidMultiPolygon from 'w-gis/src/getCentroidMultiPolygon.mjs'
 
 
 /**
- * 取得 map 物件（包裝 panTo 使其相容 Leaflet 的 [lat,lng] 格式）
+ * 取得 map 物件（包裝 panTo 使其相容 Leaflet 的 [lat,lng] 格式）。
+ * 以 Proxy 包裝而非改寫原 map 實例——就地替換 panTo 會污染共享實例,
+ * 使元件內部以原生 [lng,lat] 呼叫的平移被再翻轉一次(座標顛倒)
  * @param {Object} map
  * @returns {Object|null}
  */
 export function getMapObject(map) {
     if (!map) return null
-    if (!map._wlfWrapped) {
-        let origPanTo = map.panTo.bind(map)
-        map.panTo = (latLng, opts) => {
-            if (isarr(latLng) && size(latLng) >= 2) origPanTo([latLng[1], latLng[0]], opts)
-            else origPanTo(latLng, opts)
+    if (!map._wlfProxy) {
+        let panToLatLng = (latLng, opts) => {
+            if (isarr(latLng) && size(latLng) >= 2) map.panTo([latLng[1], latLng[0]], opts)
+            else map.panTo(latLng, opts)
         }
-        map._wlfWrapped = true
+        map._wlfProxy = new Proxy(map, {
+            get(target, prop) {
+                if (prop === 'panTo') return panToLatLng
+                let v = Reflect.get(target, prop, target) //this 一律綁原 map, 避免 proxy receiver 干擾內部實作
+                return typeof v === 'function' ? v.bind(target) : v
+            },
+        })
     }
-    return map
+    return map._wlfProxy
 }
 
 

@@ -19,6 +19,9 @@ import isNumber from 'lodash-es/isNumber.js'
  */
 export function clearTrackedByPrefix(map, prefix, trackedLayerIds, trackedSourceIds) {
     if (!map) return { layerIds: trackedLayerIds, sourceIds: trackedSourceIds }
+    //先清委派 listeners: 呼叫端(如 cluster 設定變更)清掉後會以同 layerId 重建並重新註冊,
+    //不清會逐次累積 → click 回呼被重複觸發
+    offDelegatedListenersByLayer(map, (id) => id.startsWith(prefix))
     let rl = []; let rs = []
     each(trackedLayerIds, (id) => {
         id.startsWith(prefix) ? (map.getLayer(id) && map.removeLayer(id)) : rl.push(id)
@@ -46,6 +49,31 @@ export function clearTrackedMarkersByPrefix(prefix, trackedMarkers) {
 
 
 /**
+ * 反註冊委派 listeners 中綁定於符合條件 layer id 者(使註冊與圖層同壽命, 避免累積)。
+ * 注意: 依賴 maplibre 私有結構 map._delegatedListeners, 升級 maplibre 時須確認仍相容——
+ * 故全 codebase 僅此一份實作, 各清理路徑共用。
+ * @param {Object} map - MapLibre 地圖實例
+ * @param {Function} matchLayerId - (layerId) => Boolean
+ */
+export function offDelegatedListenersByLayer(map, matchLayerId) {
+    let dl = map._delegatedListeners
+    if (!dl || !map.off) return
+    each(Object.keys(dl), (type) => {
+        each([...(dl[type] || [])], (entry) => {
+            if (entry && entry.listener && filter(entry.layers || [], matchLayerId).length > 0) {
+                try {
+                    map.off(type, entry.layers, entry.listener)
+                }
+                catch (e) {
+                    /* ignore stale listener cleanup failures */
+                }
+            }
+        })
+    })
+}
+
+
+/**
  * Remove layers/sources whose set index is no longer present.
  * Renderers use the set index in layer/source ids, so shrinking a set array leaves
  * higher-index ids behind unless they are cleaned before the next render.
@@ -66,21 +94,7 @@ export function removeStaleSetLayers(map, tracked, prefix, count) {
     let staleLayers = filter((style.layers || []).map((l) => l.id), isStale)
     let staleSources = filter(Object.keys(style.sources || {}), isStale)
 
-    let dl = map._delegatedListeners
-    if (dl && map.off) {
-        each(Object.keys(dl), (type) => {
-            each([...(dl[type] || [])], (entry) => {
-                if (entry && entry.listener && filter(entry.layers || [], isStale).length > 0) {
-                    try {
-                        map.off(type, entry.layers, entry.listener)
-                    }
-                    catch (e) {
-                        /* ignore stale listener cleanup failures */
-                    }
-                }
-            })
-        })
-    }
+    offDelegatedListenersByLayer(map, isStale)
 
     each(staleLayers, (id) => {
         if (map.getLayer(id)) map.removeLayer(id)

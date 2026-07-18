@@ -15,6 +15,7 @@
 
             <div style="padding-bottom:10px;">
                 <button id="btnMutate" style="cursor:pointer; padding:4px 10px;" @click="mutateRuntime">runtime 變更: 折線換紅色 + 隱藏多邊形</button>
+                <button id="btnShiftSets" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="shiftSets">runtime 變更: 頭部插入一組 pointSet(索引位移)</button>
             </div>
 
             <div style="position:relative;">
@@ -84,6 +85,7 @@ export default {
                     {
                         title: 'pointSet A',
                         msg: 'points for hover',
+                        key: 'main', //穩定識別 key: 陣列位移時維持組身分, 未變更組可走差異跳過
                         size: 18,
                         points: [
                             { title: 'point-circle', msg: 'circle point', latLng: [24.08, 120.88] },
@@ -94,6 +96,7 @@ export default {
                     {
                         title: 'pointSet cluster',
                         msg: 'co-located points to form a cluster',
+                        key: 'cluster',
                         points: [
                             { title: 'cluster-1', msg: 'msg', latLng: [24.08, 121.00] },
                             { title: 'cluster-2', msg: 'msg', latLng: [24.08, 121.00] },
@@ -164,6 +167,19 @@ export default {
         mutateRuntime: function() {
             this.$set(this.opt.polylineSets[0], 'lineColor', 'rgba(230,30,30,1)')
             this.$set(this.opt.polygonSets[0], 'visible', false)
+        },
+        //於陣列頭部插入一組新 pointSet(索引位移情境): 其後各組整體位移一格, 驗證位移後各組行為仍正確
+        shiftSets: function() {
+            this.opt.pointSets.unshift({
+                title: 'pointSet head',
+                msg: 'inserted at head',
+                key: 'head',
+                size: 18,
+                points: [
+                    { title: 'point-head', msg: 'head point', latLng: [24.00, 120.88] },
+                ],
+                visible: true,
+            })
         },
     },
 }

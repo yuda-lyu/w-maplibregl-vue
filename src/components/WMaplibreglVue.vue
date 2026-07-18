@@ -723,7 +723,6 @@ export default {
 
             baseMapsDataTemp: [],
             contourSubCounts: {}, // { [kcs]: Number } 等值線子層數量追蹤
-            featureIdCounter: 0,
             prevClusterKey: '',
         }
     },
@@ -1001,7 +1000,7 @@ export default {
                 if (vo.map && vo.mapLoaded) vo.applyProjection()
             }
 
-            vo.changeItemsDebounce('changeOpt')
+            vo.changeItemsDebounce()
         },
 
         processPanelBaseMaps() {
@@ -1188,41 +1187,66 @@ export default {
                 this.changePointSets()
             })
         },
-        changePointSets() {
+        //六型別 changeXxxSets 共用流程: cloneDeep → 結構 diff(omit visible) → 早退時僅同步 visible → normalize → 面板清單 + render。
+        //o: { optKey, tempKey, setsKey, defVisible, normalize(sets), render(), renderOnIdleIfNotLoaded }
+        //注意: o.defVisible 須與該型別 normalize 內的 visible 預設值一致(point/polyline/polygon/geojson=true, image/contour=false),
+        //兩處不一致會使「visible 同步早退」與「完整 normalize」對缺省 visible 的解讀不同
+        processSetsChange(o) {
             let vo = this
-            let sets = get(vo, 'opt.pointSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
+            let sets = get(vo, `opt.${o.optKey}`, null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
             let eff = map(sets, (v) => omit(v, 'visible'))
-            if (isEqual(vo.effPointSetsTemp, eff)) {
-                //結構未變: 僅同步 visible(涵蓋外部直接改 opt.pointSets[k].visible 的路徑), 有差異才重新套用顯隱
-                if (vo.syncSetsVisible(vo.pointSets, sets, true)) {
-                    vo.changeItemsDebounce('changePointSets'); if (vo.map && vo.mapLoaded) vo.renderPointSets()
+            if (isEqual(vo[o.tempKey], eff)) {
+                //結構未變: 僅同步 visible(涵蓋外部直接改 opt.xxxSets[k].visible 的路徑), 有差異才重新套用顯隱
+                if (vo.syncSetsVisible(vo[o.setsKey], sets, o.defVisible)) {
+                    vo.changeItemsDebounce(); if (vo.map && vo.mapLoaded) o.render()
                 }
                 return
             }
-            vo.effPointSetsTemp = eff
-            let fc = get(vo, 'opt.pointSetsClick', null)
-            vo.pointSets = map(sets, (ps, kps) => {
-                if (!isestr(get(ps, 'title', null))) ps.title = ''; if (!isestr(get(ps, 'msg', null))) ps.msg = ''
-                if (!isNumber(get(ps, 'order', null))) ps.order = null; if (!isbol(get(ps, 'visible', null))) ps.visible = true
-                let sz = get(ps, 'size', 10); let fl = get(ps, 'fillColor', 'rgba(0,150,255,0.65)'); let lc = get(ps, 'lineColor', 'rgba(255,255,255,1)'); let lw = get(ps, 'lineWidth', 1)
-                ps.points = map(ps.points, (pt, kpt) => {
-                    if (isearr(pt)) pt = { latLng: [get(pt, 0), get(pt, 1)] }
-                    if (!isestr(get(pt, 'title', null))) pt.title = ''; if (!isestr(get(pt, 'msg', null))) pt.msg = ''
-                    return { id: `pointSet-${kps}-point-${kpt}`, ...pt, radius: get(pt, 'size', null) || sz, fillColor: get(pt, 'fillColor', null) || fl, lineColor: get(pt, 'lineColor', null) || lc, lineWidth: get(pt, 'lineWidth', null) || lw, funSetsClick: fc }
-                })
-                return { id: `pointSet-${kps}`, ...ps, funSetsClick: fc }
-            })
-            vo.changeItemsDebounce('changePointSets')
+            vo[o.tempKey] = eff
+            vo[o.setsKey] = o.normalize(sets)
+            vo.changeItemsDebounce()
             if (vo.map) {
-                if (vo.mapLoaded) {
-                    vo.renderPointSets()
-                }
-                else {
-                    vo.map.once('idle', () => {
-                        vo.renderPointSets()
-                    })
-                }
+                if (vo.mapLoaded) o.render()
+                else if (o.renderOnIdleIfNotLoaded) vo.map.once('idle', () => o.render())
             }
+        },
+
+        changePointSets() {
+            let vo = this
+            vo.processSetsChange({
+                optKey: 'pointSets',
+                tempKey: 'effPointSetsTemp',
+                setsKey: 'pointSets',
+                defVisible: true,
+                renderOnIdleIfNotLoaded: true, //點圖層允許 map 尚未 load 完就排程渲染(once idle)
+                render: () => vo.renderPointSets(),
+                normalize: (sets) => {
+                    let fc = get(vo, 'opt.pointSetsClick', null)
+                    let norm = map(sets, (ps, kps) => {
+                        //穩定識別碼 kid: 使用者給 key(字串, 需於陣列內唯一)則陣列位移時組身分不變(可走逐組差異跳過);
+                        //未給則退回索引字串(id/圖層命名與現行完全一致)
+                        let kid = isestr(get(ps, 'key', null)) ? `k-${ps.key}` : String(kps)
+                        if (!isestr(get(ps, 'title', null))) ps.title = ''; if (!isestr(get(ps, 'msg', null))) ps.msg = ''
+                        if (!isNumber(get(ps, 'order', null))) ps.order = null; if (!isbol(get(ps, 'visible', null))) ps.visible = true
+                        let sz = get(ps, 'size', 10); let fl = get(ps, 'fillColor', 'rgba(0,150,255,0.65)'); let lc = get(ps, 'lineColor', 'rgba(255,255,255,1)'); let lw = get(ps, 'lineWidth', 1)
+                        ps.points = map(ps.points, (pt, kpt) => {
+                            if (isearr(pt)) pt = { latLng: [get(pt, 0), get(pt, 1)] }
+                            if (!isestr(get(pt, 'title', null))) pt.title = ''; if (!isestr(get(pt, 'msg', null))) pt.msg = ''
+                            return { id: `pointSet-${kid}-point-${kpt}`, ...pt, radius: get(pt, 'size', null) || sz, fillColor: get(pt, 'fillColor', null) || fl, lineColor: get(pt, 'lineColor', null) || lc, lineWidth: get(pt, 'lineWidth', null) || lw, funSetsClick: fc }
+                        })
+                        return { id: `pointSet-${kid}`, ...ps, kid, funSetsClick: fc }
+                    })
+                    //kid 查找表(刻意不進 reactive data): 事件 handler 以 _kid 取「最新」資料 / 反查當前索引。
+                    //key 重複時後者覆蓋前者(同 Vue :key 約定)
+                    let byKid = {}; let kidIdx = {}
+                    each(norm, (ps, kps) => {
+                        byKid[ps.kid] = ps; kidIdx[ps.kid] = kps
+                    })
+                    vo.pointSetsByKid = byKid
+                    vo.pointSetKidToIndex = kidIdx
+                    return norm
+                },
+            })
         },
 
         renderPointSets() {
@@ -1230,12 +1254,13 @@ export default {
             // 過渡期清理：移除舊的 DOM markers
             vo.trackedMarkers = clearTrackedMarkersByPrefix('point', vo.trackedMarkers)
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds, markers: vo.trackedMarkers }
-            removeStaleSetLayers(vo.map, tracked, 'point-', vo.pointSets.length)
-            let fCtr = { value: vo.featureIdCounter || 0 }
+            //過期清理改於 impl 內以 kid 判斷(索引式 removeStaleSetLayers 會誤刪位移後的組)
             renderPointSetsImpl(vo.map, vo.pointSets, vo.clusterOpts, tracked, {
                 registerIcon: (key, src, w, h) => registerIconImage(vo.map, key, src, w, h),
-                getPointData: (kps, kpt) => get(vo, `pointSets.${kps}.points.${kpt}`, null),
-                getPointSetData: (kps) => get(vo, `pointSets.${kps}`, null),
+                //kid 可能含 . 與 -(來自使用者 key), 須用陣列路徑查找, 不可用字串路徑
+                getPointData: (kid, kpt) => get(vo, ['pointSetsByKid', kid, 'points', kpt], null),
+                getPointSetData: (kid) => get(vo, ['pointSetsByKid', kid], null),
+                getDisplayOrderByType: () => vo.displayOrderByType,
                 onPointClick: (ptData, psData, p, coords) => {
                     if (isfun(ptData.funSetsClick)) ptData.funSetsClick({ point: ptData, pointSet: psData, pointSets: vo.pointSets })
                     let popAnchor = get(ptData, 'popupAnchor', null) || get(psData, 'popupAnchor', null)
@@ -1244,7 +1269,7 @@ export default {
                             let r = p._radius || get(psData, 'size', 10); popAnchor = [0, -(r / 1.0)]
                         }
                         else {
-                            popAnchor = get(ptData, '_defPopupAnchor', null)
+                            popAnchor = isNumber(get(p, '_defPopupAnchorY', null)) ? [0, p._defPopupAnchorY] : null //預設 icon 錨點記於 feature props
                             if (!isarr(popAnchor)) {
                                 let iSz = get(ptData, 'iconSize', null) || get(psData, 'iconSize', null) || [25, 41]
                                 popAnchor = [0, -(iSz[1] / 1.0)]
@@ -1252,11 +1277,13 @@ export default {
                         }
                     }
                     vo.activePoint = ptData; vo.activePointSet = psData
+                    //以 kid 反查當前索引: 跳過重建的組其 feature _kps 為舊索引, 直接用會使 owner 對不上顯隱切換的關閉路徑
+                    let kiPop = get(vo, ['pointSetKidToIndex', p._kid], null); if (!isNumber(kiPop)) kiPop = p._kps
                     vo.$nextTick(() => {
                         let refInner = vo.$refs.refPointPopupInner; if (!refInner || !refInner.innerHTML.trim()) return
                         vo.closeAllPopupsIfOnlyone()
                         vo.featurePopup = createDirectionalPopup(vo.map, coords, refInner, vo.popupPosition, 0, { maxWidth: 'none' }, popAnchor)
-                        vo.featurePopupOwner = `pointSets.${p._kps}`
+                        vo.featurePopupOwner = `pointSets.${kiPop}`
                     })
                 },
                 onPointEnter: (ptData, psData, p, coords) => {
@@ -1266,7 +1293,7 @@ export default {
                             tipAnchor = [0, 0]
                         }
                         else {
-                            tipAnchor = get(ptData, '_defTooltipAnchor', null)
+                            tipAnchor = isNumber(get(p, '_defTooltipAnchorY', null)) ? [0, p._defTooltipAnchorY] : null //預設 icon 錨點記於 feature props
                             if (!isarr(tipAnchor)) {
                                 let iSz = get(ptData, 'iconSize', null) || get(psData, 'iconSize', null) || [25, 41]
                                 tipAnchor = [0, -(iSz[1] / 1.0)]
@@ -1274,13 +1301,14 @@ export default {
                         }
                     }
                     vo.activePointTooltip = ptData; vo.activePointSetTooltip = psData
+                    let kiTip = get(vo, ['pointSetKidToIndex', p._kid], null); if (!isNumber(kiTip)) kiTip = p._kps
                     vo.$nextTick(() => {
                         let refEl = vo.$refs.refPointTooltip; if (!refEl) return
                         let html = refEl.innerHTML.trim(); if (!html) return
                         vo.hideFeatureTooltip()
                         let ct = document.createElement('div'); ct.innerHTML = html
                         vo.featureTooltip = createDirectionalPopup(vo.map, coords, ct, vo.tooltipPosition, 0, { closeButton: false, closeOnClick: false, maxWidth: 'none', className: 'wlv2-tooltip' }, tipAnchor)
-                        vo.featureTooltipOwner = `pointSets.${p._kps}`
+                        vo.featureTooltipOwner = `pointSets.${kiTip}`
                     })
                 },
                 onPointLeave: () => {
@@ -1290,11 +1318,10 @@ export default {
                 src: uiRes.iconPoint,
                 size: [24, 40],
                 key: 'point-icon-default',
-            }, fCtr)
+            })
             vo.trackedSourceIds = tracked.sourceIds
             vo.trackedLayerIds = tracked.layerIds
             vo.trackedMarkers = tracked.markers
-            vo.featureIdCounter = fCtr.value
             vo.scheduleRaiseFeatureLayers()
         },
 
@@ -1305,38 +1332,36 @@ export default {
             })
         },
         changePolylineSets() {
-            let vo = this; let sets = get(vo, 'opt.polylineSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible'))
-            if (isEqual(vo.effPolylineSetsTemp, eff)) {
-                if (vo.syncSetsVisible(vo.polylineSets, sets, true)) {
-                    vo.changeItemsDebounce('changePolylineSets'); if (vo.map && vo.mapLoaded) vo.renderPolylineSets()
-                }
-                return
-            }
-            vo.effPolylineSetsTemp = eff
-            let fc = get(vo, 'opt.polylineSetsClick', null)
-            vo.polylineSets = map(sets, (pls, k) => {
-                if (!isestr(get(pls, 'title', null))) pls.title = ''; if (!isestr(get(pls, 'msg', null))) pls.msg = ''
-                if (!isNumber(get(pls, 'order', null))) pls.order = null; if (!isbol(get(pls, 'visible', null))) pls.visible = true
-                let lc = get(pls, 'lineColor', null); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
-                let lw = get(pls, 'lineWidth', null); if (!isNumber(lw)) lw = 3
-                return { id: `polylineSet-${k}`, ...pls, lineColor: lc, lineWidth: lw, funSetsClick: fc }
+            let vo = this
+            vo.processSetsChange({
+                optKey: 'polylineSets',
+                tempKey: 'effPolylineSetsTemp',
+                setsKey: 'polylineSets',
+                defVisible: true,
+                render: () => vo.renderPolylineSets(),
+                normalize: (sets) => {
+                    let fc = get(vo, 'opt.polylineSetsClick', null)
+                    return map(sets, (pls, k) => {
+                        if (!isestr(get(pls, 'title', null))) pls.title = ''; if (!isestr(get(pls, 'msg', null))) pls.msg = ''
+                        if (!isNumber(get(pls, 'order', null))) pls.order = null; if (!isbol(get(pls, 'visible', null))) pls.visible = true
+                        let lc = get(pls, 'lineColor', null); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
+                        let lw = get(pls, 'lineWidth', null); if (!isNumber(lw)) lw = 3
+                        return { id: `polylineSet-${k}`, ...pls, lineColor: lc, lineWidth: lw, funSetsClick: fc }
+                    })
+                },
             })
-            vo.changeItemsDebounce('changePolylineSets'); if (vo.map && vo.mapLoaded) vo.renderPolylineSets()
         },
         renderPolylineSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
             removeStaleSetLayers(vo.map, tracked, 'polyline-', vo.polylineSets.length)
-            let fCtr = { value: vo.featureIdCounter || 0 }
             renderPolylineSetsImpl(vo.map, vo.polylineSets, tracked, {
                 shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
                 onTooltipEnter: (lngLat, fd, type, idx) => vo.showFeatureTooltip(lngLat, fd, type, idx),
                 onTooltipLeave: () => vo.hideFeatureTooltip(),
-            }, fCtr)
+            })
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
-            vo.featureIdCounter = fCtr.value
             vo.scheduleRaiseFeatureLayers()
         },
 
@@ -1347,39 +1372,37 @@ export default {
             })
         },
         changePolygonSets() {
-            let vo = this; let sets = get(vo, 'opt.polygonSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible'))
-            if (isEqual(vo.effPolygonSetsTemp, eff)) {
-                if (vo.syncSetsVisible(vo.polygonSets, sets, true)) {
-                    vo.changeItemsDebounce('changePolygonSets'); if (vo.map && vo.mapLoaded) vo.renderPolygonSets()
-                }
-                return
-            }
-            vo.effPolygonSetsTemp = eff
-            let fc = get(vo, 'opt.polygonSetsClick', null)
-            vo.polygonSets = map(sets, (pg, k) => {
-                if (!isestr(get(pg, 'title', null))) pg.title = ''; if (!isestr(get(pg, 'msg', null))) pg.msg = ''
-                if (!isNumber(get(pg, 'order', null))) pg.order = null; if (!isbol(get(pg, 'visible', null))) pg.visible = true
-                let lc = get(pg, 'lineColor', 'rgba(0,150,255,1)'); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
-                let lw = get(pg, 'lineWidth', 3); if (!isNumber(lw)) lw = 3
-                let fl = get(pg, 'fillColor', 'rgba(0,150,255,0.25)'); if (!isestr(fl)) fl = 'rgba(0,150,255,0.25)'
-                return { id: `polygonSet-${k}`, ...pg, lineColor: lc, lineWidth: lw, fillColor: fl, funSetsClick: fc }
+            let vo = this
+            vo.processSetsChange({
+                optKey: 'polygonSets',
+                tempKey: 'effPolygonSetsTemp',
+                setsKey: 'polygonSets',
+                defVisible: true,
+                render: () => vo.renderPolygonSets(),
+                normalize: (sets) => {
+                    let fc = get(vo, 'opt.polygonSetsClick', null)
+                    return map(sets, (pg, k) => {
+                        if (!isestr(get(pg, 'title', null))) pg.title = ''; if (!isestr(get(pg, 'msg', null))) pg.msg = ''
+                        if (!isNumber(get(pg, 'order', null))) pg.order = null; if (!isbol(get(pg, 'visible', null))) pg.visible = true
+                        let lc = get(pg, 'lineColor', 'rgba(0,150,255,1)'); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
+                        let lw = get(pg, 'lineWidth', 3); if (!isNumber(lw)) lw = 3
+                        let fl = get(pg, 'fillColor', 'rgba(0,150,255,0.25)'); if (!isestr(fl)) fl = 'rgba(0,150,255,0.25)'
+                        return { id: `polygonSet-${k}`, ...pg, lineColor: lc, lineWidth: lw, fillColor: fl, funSetsClick: fc }
+                    })
+                },
             })
-            vo.changeItemsDebounce('changePolygonSets'); if (vo.map && vo.mapLoaded) vo.renderPolygonSets()
         },
         renderPolygonSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
             removeStaleSetLayers(vo.map, tracked, 'polygon-', vo.polygonSets.length)
-            let fCtr = { value: vo.featureIdCounter || 0 }
             renderPolygonSetsImpl(vo.map, vo.polygonSets, tracked, {
                 shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
                 onTooltipEnter: (lngLat, fd, type, idx) => vo.showFeatureTooltip(lngLat, fd, type, idx),
                 onTooltipLeave: () => vo.hideFeatureTooltip(),
-            }, fCtr)
+            })
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
-            vo.featureIdCounter = fCtr.value
             vo.scheduleRaiseFeatureLayers()
         },
 
@@ -1390,25 +1413,25 @@ export default {
             })
         },
         changeGeojsonSets() {
-            let vo = this; let sets = get(vo, 'opt.geojsonSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible'))
-            if (isEqual(vo.effGeojsonSetsTemp, eff)) {
-                if (vo.syncSetsVisible(vo.geojsonSets, sets, true)) {
-                    vo.changeItemsDebounce('changeGeojsonSets'); if (vo.map && vo.mapLoaded) vo.renderGeojsonSets()
-                }
-                return
-            }
-            vo.effGeojsonSetsTemp = eff
-            let fc = get(vo, 'opt.geojsonSetsClick', null)
-            vo.geojsonSets = map(sets, (gj, k) => {
-                if (!isestr(get(gj, 'title', null))) gj.title = ''; if (!isestr(get(gj, 'msg', null))) gj.msg = ''
-                if (!isNumber(get(gj, 'order', null))) gj.order = null; if (!isbol(get(gj, 'visible', null))) gj.visible = true
-                let lc = get(gj, 'lineColor', 'rgba(0,150,255,1)'); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
-                let lw = get(gj, 'lineWidth', 3); if (!isNumber(lw)) lw = 3
-                let fl = get(gj, 'fillColor', 'rgba(0,150,255,0.25)'); if (!isestr(fl)) fl = 'rgba(0,150,255,0.25)'
-                return { id: `geojsonSet-${k}`, ...gj, lineColor: lc, lineWidth: lw, fillColor: fl, funSetsClick: fc }
+            let vo = this
+            vo.processSetsChange({
+                optKey: 'geojsonSets',
+                tempKey: 'effGeojsonSetsTemp',
+                setsKey: 'geojsonSets',
+                defVisible: true,
+                render: () => vo.renderGeojsonSets(),
+                normalize: (sets) => {
+                    let fc = get(vo, 'opt.geojsonSetsClick', null)
+                    return map(sets, (gj, k) => {
+                        if (!isestr(get(gj, 'title', null))) gj.title = ''; if (!isestr(get(gj, 'msg', null))) gj.msg = ''
+                        if (!isNumber(get(gj, 'order', null))) gj.order = null; if (!isbol(get(gj, 'visible', null))) gj.visible = true
+                        let lc = get(gj, 'lineColor', 'rgba(0,150,255,1)'); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
+                        let lw = get(gj, 'lineWidth', 3); if (!isNumber(lw)) lw = 3
+                        let fl = get(gj, 'fillColor', 'rgba(0,150,255,0.25)'); if (!isestr(fl)) fl = 'rgba(0,150,255,0.25)'
+                        return { id: `geojsonSet-${k}`, ...gj, lineColor: lc, lineWidth: lw, fillColor: fl, funSetsClick: fc }
+                    })
+                },
             })
-            vo.changeItemsDebounce('changeGeojsonSets'); if (vo.map && vo.mapLoaded) vo.renderGeojsonSets()
         },
         renderGeojsonSets() {
             let vo = this
@@ -1431,21 +1454,21 @@ export default {
             })
         },
         changeImageSets() {
-            let vo = this; let sets = get(vo, 'opt.imageSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible'))
-            if (isEqual(vo.effImageSetsTemp, eff)) {
-                if (vo.syncSetsVisible(vo.imageSets, sets, false)) {
-                    vo.changeItemsDebounce('changeImageSets'); if (vo.map && vo.mapLoaded) vo.renderImageSets()
-                }
-                return
-            }
-            vo.effImageSetsTemp = eff
-            vo.imageSets = map(sets, (im, k) => {
-                if (!isestr(get(im, 'title', null))) im.title = ''; if (!isestr(get(im, 'msg', null))) im.msg = ''
-                if (!isNumber(get(im, 'order', null))) im.order = null; if (!isbol(get(im, 'visible', null))) im.visible = false
-                return { id: `imageSet-${k}`, ...im }
+            let vo = this
+            vo.processSetsChange({
+                optKey: 'imageSets',
+                tempKey: 'effImageSetsTemp',
+                setsKey: 'imageSets',
+                defVisible: false,
+                render: () => vo.renderImageSets(),
+                normalize: (sets) => {
+                    return map(sets, (im, k) => {
+                        if (!isestr(get(im, 'title', null))) im.title = ''; if (!isestr(get(im, 'msg', null))) im.msg = ''
+                        if (!isNumber(get(im, 'order', null))) im.order = null; if (!isbol(get(im, 'visible', null))) im.visible = false
+                        return { id: `imageSet-${k}`, ...im }
+                    })
+                },
             })
-            vo.changeItemsDebounce('changeImageSets'); if (vo.map && vo.mapLoaded) vo.renderImageSets()
         },
         renderImageSets() {
             let vo = this
@@ -1464,18 +1487,19 @@ export default {
         },
         changeContourSets() {
             let vo = this
-            let contourSets = get(vo, 'opt.contourSets', null); if (!isarr(contourSets)) contourSets = []
-            contourSets = cloneDeep(contourSets)
-            let effContourSets = map(contourSets, (v) => omit(v, 'visible'))
-            if (isEqual(vo.effContourSetsTemp, effContourSets)) {
-                if (vo.syncSetsVisible(vo.contourSets, contourSets, false)) {
-                    vo.changeItemsDebounce('changeContourSets'); if (vo.map && vo.mapLoaded) vo.renderContourSets()
-                }
-                return
-            }
-            vo.effContourSetsTemp = effContourSets
+            vo.processSetsChange({
+                optKey: 'contourSets',
+                tempKey: 'effContourSetsTemp',
+                setsKey: 'contourSets',
+                defVisible: false,
+                render: () => vo.renderContourSets(),
+                normalize: (sets) => vo.normalizeContourSets(sets),
+            })
+        },
+        normalizeContourSets(contourSets) {
+            let vo = this
             let funSetsClick = get(vo, 'opt.contourSetsClick', null)
-            vo.contourSets = map(contourSets, (contourSet, kcontourSet) => {
+            return map(contourSets, (contourSet, kcontourSet) => {
                 let lineColor = get(contourSet, 'lineColor', null); if (!isestr(lineColor)) lineColor = ''
                 let lineWidth = get(contourSet, 'lineWidth', null); if (!isNumber(lineWidth)) lineWidth = 1
                 let fillOpacity = get(contourSet, 'fillOpacity', null); if (!isNumber(fillOpacity)) fillOpacity = 0.2
@@ -1507,14 +1531,11 @@ export default {
                     funSetsClick,
                 }
             })
-            vo.changeItemsDebounce('changeContourSets')
-            if (vo.map && vo.mapLoaded) vo.renderContourSets()
         },
         renderContourSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
             removeStaleSetLayers(vo.map, tracked, 'contour-', vo.contourSets.length)
-            let fCtr = { value: vo.featureIdCounter || 0 }
             renderContourSetsImpl(vo.map, vo.contourSets, tracked, vo.contourSubCounts, {
                 shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onContourClick: (e, ps, kps, cs, kcs, contourSets) => {
@@ -1552,9 +1573,8 @@ export default {
                 onContourLeave: () => {
                     vo.hideFeatureTooltip()
                 },
-            }, fCtr)
+            })
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
-            vo.featureIdCounter = fCtr.value
             vo.scheduleRaiseFeatureLayers()
         },
 
@@ -1564,9 +1584,9 @@ export default {
             return countVisible(arr)
         },
 
-        changeItemsDebounce(from) {
+        changeItemsDebounce() {
             this.dbcChangeItems(() => {
-                this.changeItems(from)
+                this.changeItems()
             })
         },
         changeItems() {
