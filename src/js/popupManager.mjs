@@ -80,8 +80,12 @@ export function createDirectionalPopup(map, lngLat, content, position, gap, extr
     catch (e) { /* 二次校正失敗時維持當前方向 */ }
 
     popup._dirMeta = {
-        lngLat, position, chosenDir: chosenPos,
-        gap, extraOpts, anchorOffset: anchorOffset || null,
+        lngLat,
+        position,
+        chosenDir: chosenPos,
+        gap,
+        extraOpts,
+        anchorOffset: anchorOffset || null,
         contentEl: content, // 存「活的 DOM 元素參考」, 翻轉/recheck 時沿用同一元素(非靜態 innerHTML 複製)
     }
     return popup
@@ -146,7 +150,9 @@ export function recheckSinglePopupDir(map, popup) {
         newPopup._dirMeta = { ...meta, chosenDir: newDir }
         return newPopup
     }
-    catch (e) { return popup }
+    catch (e) {
+        return popup
+    }
 }
 
 
@@ -163,12 +169,20 @@ export function registerIconImage(map, key, src, tw, th) {
     if (!map || map.hasImage(key)) return Promise.resolve()
     return new Promise((resolve) => {
         let img = new Image()
+        img.crossOrigin = 'anonymous' //跨域圖片須帶 CORS 載入, 否則 canvas 被污染後 getImageData 會 throw
         img.onload = () => {
-            if (!map || map.hasImage(key)) { resolve(); return }
-            let c = document.createElement('canvas'); c.width = tw; c.height = th
-            let ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, tw, th)
-            let d = ctx.getImageData(0, 0, tw, th)
-            map.addImage(key, { width: tw, height: th, data: new Uint8Array(d.data.buffer) })
+            if (!map || map.hasImage(key)) {
+                resolve(); return
+            }
+            try {
+                let c = document.createElement('canvas'); c.width = tw; c.height = th
+                let ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, tw, th)
+                let d = ctx.getImageData(0, 0, tw, th)
+                map.addImage(key, { width: tw, height: th, data: new Uint8Array(d.data.buffer) })
+            }
+            catch (e) {
+                console.warn('[popupManager] registerIconImage error:', e) //單顆 icon 失敗不可卡住整組渲染
+            }
             resolve()
         }
         img.onerror = () => resolve()

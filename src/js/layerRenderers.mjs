@@ -34,6 +34,108 @@ import splitAndProcGeoJSON from 'w-gis/src/splitAndProcGeoJSON.mjs'
 // ===== 工具函式 =====
 
 /**
+ * 集中式圖層 hover 管理器
+ *
+ * maplibre 對「帶 layerId 的委派事件」之內部實作, 是每個 listener 於每次 mousemove 各自執行一次
+ * queryRenderedFeatures 命中測試(單次約 5ms 基礎開銷); 互動圖層一多(如 22 層 × enter/leave = 44 個
+ * 委派 listener)單次滑鼠移動即阻塞主執行緒 200ms+。本管理器全 map 僅掛一個 mousemove listener,
+ * 每次滑鼠移動最多執行一次 queryRenderedFeatures(帶全部已註冊圖層), 依命中差集對各圖層分發
+ * enter/leave, 語意與原委派事件相同(enter 事件帶 features, 由上而下排序)。並加兩道防護:
+ *   - 拖曳中(originalEvent.buttons > 0)與地圖動畫中(map.isMoving())不做命中測試——拖曳體驗優先, hover 狀態暫凍結
+ *   - 命中測試節流(leading+trailing, 間隔 100ms)——高頻 mousemove 合併為一次查詢
+ *
+ * 注意: 每個 layerId 僅支援一組 handler(重複註冊為覆蓋語意, 與原生 map.on 可疊加多 listener 不同)
+ */
+const KEY_HOVER_MANAGER = '__wmlgvHoverManager'
+export function onLayerHover(map, layerId, onEnter, onLeave) {
+    let mgr = map[KEY_HOVER_MANAGER]
+    if (!mgr) {
+        mgr = { regs: {}, hovered: {} }
+        map[KEY_HOVER_MANAGER] = mgr
+        //對「先前 hover 中、本次未命中」之圖層分發 leave; hit 為 null 代表滑鼠離開地圖, 全部 leave
+        let dispatchLeaves = (hit) => {
+            each(Object.keys(mgr.hovered), (lid) => {
+                if (hit && hit[lid]) return
+                delete mgr.hovered[lid]
+                let r = mgr.regs[lid]
+                if (r && isfun(r.onLeave)) r.onLeave()
+            })
+        }
+        //單次命中測試: 一次 queryRenderedFeatures 帶全部已註冊圖層, 依命中差集分發 enter/leave
+        let runHitTest = () => {
+            if (!map || !map.style) return //map 已被銷毀(節流 trailing timer 殘留之競態)
+            let e = mgr.lastEv
+            if (!e) return
+            let lids = Object.keys(mgr.regs).filter((lid) => map.getLayer(lid))
+            let fs = []
+            if (lids.length > 0) {
+                try {
+                    fs = map.queryRenderedFeatures(e.point, { layers: lids }) || []
+                }
+                catch (err) {
+                    fs = []
+                }
+            }
+            let hit = {}
+            each(fs, (f) => {
+                let lid = f && f.layer && f.layer.id
+                if (!lid) return
+                if (!hit[lid]) hit[lid] = []
+                hit[lid].push(f) //queryRenderedFeatures 由上而下排序, hit[lid][0] 即該層最上層 feature
+            })
+            dispatchLeaves(hit)
+            each(Object.keys(hit), (lid) => {
+                if (mgr.hovered[lid]) return
+                mgr.hovered[lid] = true
+                let r = mgr.regs[lid]
+                if (r && isfun(r.onEnter)) r.onEnter({ point: e.point, lngLat: e.lngLat, originalEvent: e.originalEvent, features: hit[lid] })
+            })
+        }
+        //節流(leading+trailing): 命中測試最多每 HIT_TEST_INTERVAL 執行一次, 高頻 mousemove 合併為一次查詢
+        const HIT_TEST_INTERVAL = 100
+        map.on('mousemove', (e) => {
+            //拖曳中(按鍵按住)或地圖動畫中不做 hover 命中測試, 拖曳體驗優先(hover 狀態暫凍結)
+            if (e.originalEvent && e.originalEvent.buttons > 0) return
+            if (isfun(map.isMoving) && map.isMoving()) return
+            mgr.lastEv = { point: e.point, lngLat: e.lngLat, originalEvent: e.originalEvent }
+            let now = performance.now()
+            let since = now - (mgr.lastRun || 0)
+            if (since >= HIT_TEST_INTERVAL) {
+                mgr.lastRun = now
+                runHitTest()
+            }
+            else if (!mgr.pending) {
+                mgr.pending = true
+                setTimeout(() => {
+                    mgr.pending = false
+                    mgr.lastRun = performance.now()
+                    runHitTest()
+                }, HIT_TEST_INTERVAL - since)
+            }
+        })
+        map.on('mouseout', () => {
+            mgr.lastEv = null //使節流中之待執行命中測試失效, 避免滑鼠已離開地圖仍誤發 enter
+            dispatchLeaves(null)
+        })
+    }
+    mgr.regs[layerId] = { onEnter, onLeave }
+}
+
+
+/**
+ * 各型別「最新一輪 render 的正規化資料」存放處(掛於 map 實例上)。
+ * 事件 handler 於事件觸發時來此查最新資料, 而非使用建層當時閉包捕捉的物件——
+ * 否則 runtime 變更資料/樣式後(source 已存在僅 setData), 回呼會帶到舊值。
+ * 另存 renderPointSets 的每 source render 序號, 供作廢 icon 非同步載入期間的舊輪 doRender。
+ */
+const KEY_SETS_STORE = '__wmlgvSetsStore'
+function getSetsStore(map) {
+    if (!map[KEY_SETS_STORE]) map[KEY_SETS_STORE] = {}
+    return map[KEY_SETS_STORE]
+}
+
+
+/**
  * 點是否在環（ring）內部（Ray Casting 演算法）
  * @param {Array} pt - [lng, lat]
  * @param {Array} ring - [[lng, lat], ...]
@@ -133,6 +235,8 @@ export function buildContourLegend(data, contourSet) {
  */
 export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks, iconDefault, featureIdCounter) {
     if (!map) return
+    let store = getSetsStore(map)
+    if (!store.pointRenderSeq) store.pointRenderSeq = {}
 
     each(pointSets, (ps, kps) => {
         let srcId = `point-${kps}-src`
@@ -140,6 +244,11 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
         let symbolId = `point-${kps}-symbol`
         let clusterCircleId = `point-${kps}-cluster-circle`
         let clusterCountId = `point-${kps}-cluster-count`
+
+        //每 source 一個 render 序號: icon 非同步載入期間若資料再變更(或該組轉為隱藏),
+        //舊輪 doRender 於載入完成後執行會以舊資料覆寫新資料, 故以序號作廢舊輪
+        store.pointRenderSeq[srcId] = (store.pointRenderSeq[srcId] || 0) + 1
+        let renderSeq = store.pointRenderSeq[srcId]
 
         if (!ps.visible) {
             each([circleId, symbolId, clusterCircleId, clusterCountId], (lid) => {
@@ -241,6 +350,7 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
 
         let doRender = () => {
             if (!map) return
+            if (store.pointRenderSeq[srcId] !== renderSeq) return //已有較新一輪 render, 放棄本輪避免舊資料覆寫
             if (map.getSource(srcId)) {
                 map.getSource(srcId).setData(geojsonData)
                 if (map.getLayer(symbolId)) {
@@ -331,10 +441,9 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
                             }).catch(() => {})
                         }
                     })
-                    map.on('mouseenter', clusterCircleId, () => {
+                    onLayerHover(map, clusterCircleId, () => {
                         map.getCanvas().style.cursor = 'pointer'
-                    })
-                    map.on('mouseleave', clusterCircleId, () => {
+                    }, () => {
                         map.getCanvas().style.cursor = ''
                     })
                 }
@@ -351,18 +460,16 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
 
                 map.on('click', circleId, (e) => handlePointEvent(e, (ev, ptData, psData, p, coords) => callbacks.onPointClick(ptData, psData, p, coords)))
                 map.on('click', symbolId, (e) => handlePointEvent(e, (ev, ptData, psData, p, coords) => callbacks.onPointClick(ptData, psData, p, coords)))
-                map.on('mouseenter', circleId, (e) => {
+                onLayerHover(map, circleId, (e) => {
                     map.getCanvas().style.cursor = 'pointer'
                     handlePointEvent(e, (ev, ptData, psData, p, coords) => callbacks.onPointEnter(ptData, psData, p, coords))
-                })
-                map.on('mouseenter', symbolId, (e) => {
-                    map.getCanvas().style.cursor = 'pointer'
-                    handlePointEvent(e, (ev, ptData, psData, p, coords) => callbacks.onPointEnter(ptData, psData, p, coords))
-                })
-                map.on('mouseleave', circleId, () => {
+                }, () => {
                     map.getCanvas().style.cursor = ''; callbacks.onPointLeave()
                 })
-                map.on('mouseleave', symbolId, () => {
+                onLayerHover(map, symbolId, (e) => {
+                    map.getCanvas().style.cursor = 'pointer'
+                    handlePointEvent(e, (ev, ptData, psData, p, coords) => callbacks.onPointEnter(ptData, psData, p, coords))
+                }, () => {
                     map.getCanvas().style.cursor = ''; callbacks.onPointLeave()
                 })
             }
@@ -388,6 +495,8 @@ export function renderPointSets(map, pointSets, clusterOpts, tracked, callbacks,
  */
 export function renderPolylineSets(map, polylineSets, tracked, callbacks, featureIdCounter) {
     if (!map) return
+    let store = getSetsStore(map)
+    store.polylineSets = polylineSets //供事件 handler 於事件時取最新資料
     each(polylineSets, (pls, k) => {
         let sid = `polyline-src-${k}`; let lid = `polyline-layer-${k}`
         if (!pls.visible) {
@@ -411,6 +520,10 @@ export function renderPolylineSets(map, polylineSets, tracked, callbacks, featur
         let geojsonData = { type: 'Feature', id: featureId, geometry: { type: geomType, coordinates: coords } }
         if (map.getSource(sid)) {
             map.getSource(sid).setData(geojsonData)
+            if (map.getLayer(lid)) { //setData 路徑同步更新 paint, 使 runtime 樣式變更生效
+                map.setPaintProperty(lid, 'line-color', pls.lineColor)
+                map.setPaintProperty(lid, 'line-width', pls.lineWidth)
+            }
         }
         else {
             map.addSource(sid, { type: 'geojson', data: geojsonData, generateId: true })
@@ -418,14 +531,15 @@ export function renderPolylineSets(map, polylineSets, tracked, callbacks, featur
             tracked.sourceIds.push(sid); tracked.layerIds.push(lid)
             map.on('click', lid, (e) => {
                 if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'polyline')) return //讓位給更高優先型別(如點)
-                if (isfun(pls.funSetsClick)) pls.funSetsClick({ ev: e, polylineSet: pls, kpolylineSet: k, polylineSets })
-                callbacks.onPopupClick(e.lngLat, pls, 'polyline', k)
+                let plsNow = get(store, `polylineSets.${k}`, null) || pls //事件時取最新 render 資料, 避免閉包滯留舊值
+                if (isfun(plsNow.funSetsClick)) plsNow.funSetsClick({ ev: e, polylineSet: plsNow, kpolylineSet: k, polylineSets: store.polylineSets })
+                callbacks.onPopupClick(e.lngLat, plsNow, 'polyline', k)
             })
-            map.on('mouseenter', lid, (e) => {
+            onLayerHover(map, lid, (e) => {
                 map.getCanvas().style.cursor = 'pointer'
-                callbacks.onTooltipEnter(e.lngLat, pls, 'polyline', k)
-            })
-            map.on('mouseleave', lid, () => {
+                let plsNow = get(store, `polylineSets.${k}`, null) || pls
+                callbacks.onTooltipEnter(e.lngLat, plsNow, 'polyline', k)
+            }, () => {
                 map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave()
             })
         }
@@ -438,6 +552,8 @@ export function renderPolylineSets(map, polylineSets, tracked, callbacks, featur
  */
 export function renderPolygonSets(map, polygonSets, tracked, callbacks, featureIdCounter) {
     if (!map) return
+    let store = getSetsStore(map)
+    store.polygonSets = polygonSets //供事件 handler 於事件時取最新資料
     each(polygonSets, (pg, k) => {
         let sid = `polygon-src-${k}`; let fid = `polygon-fill-${k}`; let lid = `polygon-line-${k}`
         if (!pg.visible) {
@@ -454,6 +570,11 @@ export function renderPolygonSets(map, polygonSets, tracked, callbacks, featureI
         let geojsonData = { type: 'Feature', id: featureId, geometry }
         if (map.getSource(sid)) {
             map.getSource(sid).setData(geojsonData)
+            if (map.getLayer(fid)) map.setPaintProperty(fid, 'fill-color', pg.fillColor) //setData 路徑同步更新 paint, 使 runtime 樣式變更生效
+            if (map.getLayer(lid)) {
+                map.setPaintProperty(lid, 'line-color', pg.lineColor)
+                map.setPaintProperty(lid, 'line-width', pg.lineWidth)
+            }
         }
         else {
             map.addSource(sid, { type: 'geojson', data: geojsonData, generateId: true })
@@ -462,14 +583,15 @@ export function renderPolygonSets(map, polygonSets, tracked, callbacks, featureI
             tracked.sourceIds.push(sid); tracked.layerIds.push(fid, lid)
             map.on('click', fid, (e) => {
                 if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'polygon')) return //讓位給更高優先型別(點/線/geojson)
-                if (isfun(pg.funSetsClick)) pg.funSetsClick({ ev: e, polygonSet: pg, kpolygonSet: k, polygonSets })
-                callbacks.onPopupClick(e.lngLat, pg, 'polygon', k)
+                let pgNow = get(store, `polygonSets.${k}`, null) || pg //事件時取最新 render 資料, 避免閉包滯留舊值
+                if (isfun(pgNow.funSetsClick)) pgNow.funSetsClick({ ev: e, polygonSet: pgNow, kpolygonSet: k, polygonSets: store.polygonSets })
+                callbacks.onPopupClick(e.lngLat, pgNow, 'polygon', k)
             })
-            map.on('mouseenter', fid, (e) => {
+            onLayerHover(map, fid, (e) => {
                 map.getCanvas().style.cursor = 'pointer'
-                callbacks.onTooltipEnter(e.lngLat, pg, 'polygon', k)
-            })
-            map.on('mouseleave', fid, () => {
+                let pgNow = get(store, `polygonSets.${k}`, null) || pg
+                callbacks.onTooltipEnter(e.lngLat, pgNow, 'polygon', k)
+            }, () => {
                 map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave()
             })
         }
@@ -482,6 +604,8 @@ export function renderPolygonSets(map, polygonSets, tracked, callbacks, featureI
  */
 export function renderGeojsonSets(map, geojsonSets, tracked, callbacks) {
     if (!map) return
+    let store = getSetsStore(map)
+    store.geojsonSets = geojsonSets //供事件 handler 於事件時取最新資料
     each(geojsonSets, (gj, k) => {
         let ptsSid = `geojson-pts-src-${k}`; let ptsLid = `geojson-pts-circle-${k}`
         let lnsSid = `geojson-lns-src-${k}`; let lnsLid = `geojson-lns-line-${k}`
@@ -505,20 +629,25 @@ export function renderGeojsonSets(map, geojsonSets, tracked, callbacks) {
         let bindEvents = (layerId) => {
             map.on('click', layerId, (e) => {
                 if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'geojson')) return //讓位給更高優先型別(點/線)
-                if (isfun(gj.funSetsClick)) gj.funSetsClick({ ev: e, lat: e.lngLat.lat, lng: e.lngLat.lng, geojsonSet: gj, kgeojsonSet: k, geojsonSets })
-                callbacks.onPopupClick(e.lngLat, gj, 'geojson', k)
+                let gjNow = get(store, `geojsonSets.${k}`, null) || gj //事件時取最新 render 資料, 避免閉包滯留舊值
+                if (isfun(gjNow.funSetsClick)) gjNow.funSetsClick({ ev: e, lat: e.lngLat.lat, lng: e.lngLat.lng, geojsonSet: gjNow, kgeojsonSet: k, geojsonSets: store.geojsonSets })
+                callbacks.onPopupClick(e.lngLat, gjNow, 'geojson', k)
             })
-            map.on('mouseenter', layerId, (e) => {
+            onLayerHover(map, layerId, (e) => {
                 map.getCanvas().style.cursor = 'pointer'
-                callbacks.onTooltipEnter(e.lngLat, gj, 'geojson', k)
-            })
-            map.on('mouseleave', layerId, () => {
+                let gjNow = get(store, `geojsonSets.${k}`, null) || gj
+                callbacks.onTooltipEnter(e.lngLat, gjNow, 'geojson', k)
+            }, () => {
                 map.getCanvas().style.cursor = ''; callbacks.onTooltipLeave()
             })
         }
 
         if (map.getSource(ptsSid)) {
             map.getSource(ptsSid).setData(splitted.points)
+            if (map.getLayer(ptsLid)) { //setData 路徑同步更新 paint, 使 runtime 樣式變更生效(下同)
+                map.setPaintProperty(ptsLid, 'circle-color', gj.fillColor)
+                map.setPaintProperty(ptsLid, 'circle-stroke-color', gj.lineColor)
+            }
         }
         else {
             map.addSource(ptsSid, { type: 'geojson', data: splitted.points, generateId: true })
@@ -528,6 +657,10 @@ export function renderGeojsonSets(map, geojsonSets, tracked, callbacks) {
         }
         if (map.getSource(lnsSid)) {
             map.getSource(lnsSid).setData(splitted.lines)
+            if (map.getLayer(lnsLid)) {
+                map.setPaintProperty(lnsLid, 'line-color', gj.lineColor)
+                map.setPaintProperty(lnsLid, 'line-width', gj.lineWidth)
+            }
         }
         else {
             map.addSource(lnsSid, { type: 'geojson', data: splitted.lines, generateId: true })
@@ -537,6 +670,11 @@ export function renderGeojsonSets(map, geojsonSets, tracked, callbacks) {
         }
         if (map.getSource(pgsSid)) {
             map.getSource(pgsSid).setData(splitted.polygons)
+            if (map.getLayer(pgsFid)) map.setPaintProperty(pgsFid, 'fill-color', gj.fillColor)
+            if (map.getLayer(pgsLid)) {
+                map.setPaintProperty(pgsLid, 'line-color', gj.lineColor)
+                map.setPaintProperty(pgsLid, 'line-width', gj.lineWidth)
+            }
         }
         else {
             map.addSource(pgsSid, { type: 'geojson', data: splitted.polygons, generateId: true })
@@ -595,6 +733,9 @@ export function renderImageSets(map, imageSets, tracked) {
  */
 export function renderContourSets(map, contourSets, tracked, subCounts, callbacks, featureIdCounter) {
     if (!map) return
+    let store = getSetsStore(map)
+    store.contourSets = contourSets //供事件 handler 於事件時取最新資料
+    if (!store.contourBands) store.contourBands = {}
 
     each(contourSets, (cs, kcs) => {
         let prevCount = subCounts[kcs] || 0
@@ -636,6 +777,8 @@ export function renderContourSets(map, contourSets, tracked, subCounts, callback
         // 更新圖例
         cs.legend = buildContourLegend({ polygonSets }, cs)
 
+        store.contourBands[kcs] = polygonSets //最新色帶資料, 供 handler 於事件時查詢
+
         let newCount = polygonSets.length
 
         // 移除多餘舊子層
@@ -668,6 +811,14 @@ export function renderContourSets(map, contourSets, tracked, subCounts, callback
 
             if (map.getSource(sid)) {
                 map.getSource(sid).setData(geojsonData)
+                if (map.getLayer(fid)) { //setData 路徑同步更新 paint, 使 runtime 樣式/色帶變更生效
+                    map.setPaintProperty(fid, 'fill-color', ps.fillColor)
+                    map.setPaintProperty(fid, 'fill-opacity', cs.fillOpacity)
+                }
+                if (map.getLayer(lid)) {
+                    map.setPaintProperty(lid, 'line-color', ps.lineColor)
+                    map.setPaintProperty(lid, 'line-width', cs.lineWidth)
+                }
             }
             else {
                 map.addSource(sid, { type: 'geojson', data: geojsonData, generateId: true })
@@ -675,26 +826,34 @@ export function renderContourSets(map, contourSets, tracked, subCounts, callback
                 map.addLayer({ id: lid, type: 'line', source: sid, paint: { 'line-color': ps.lineColor, 'line-width': cs.lineWidth } })
                 tracked.sourceIds.push(sid); tracked.layerIds.push(fid, lid)
 
+                //事件時取最新 render 資料(set 與色帶), 避免閉包滯留舊值
+                let getNow = () => {
+                    let csNow = get(store, `contourSets.${kcs}`, null) || cs
+                    let psNow = get(store, `contourBands.${kcs}.${kps}`, null) || ps
+                    return { csNow, psNow }
+                }
                 map.on('click', fid, (e) => {
                     if (callbacks.shouldDeferClick && callbacks.shouldDeferClick(e.point, 'contour')) return //讓位給更高優先型別
-                    callbacks.onContourClick(e, ps, kps, cs, kcs, contourSets)
+                    let { csNow, psNow } = getNow()
+                    callbacks.onContourClick(e, psNow, kps, csNow, kcs, store.contourSets)
                 })
-                map.on('mouseenter', fid, (e) => {
+                onLayerHover(map, fid, (e) => {
                     map.getCanvas().style.cursor = 'pointer'
-                    if (cs.changeStyleWhenHover) {
-                        let lineColorH = isestr(cs.lineColorHover) ? cs.lineColorHover : ps.color
-                        map.setPaintProperty(fid, 'fill-opacity', cs.fillOpacityHover)
+                    let { csNow, psNow } = getNow()
+                    if (csNow.changeStyleWhenHover && map.getLayer(fid) && map.getLayer(lid)) {
+                        let lineColorH = isestr(csNow.lineColorHover) ? csNow.lineColorHover : psNow.color
+                        map.setPaintProperty(fid, 'fill-opacity', csNow.fillOpacityHover)
                         map.setPaintProperty(lid, 'line-color', lineColorH)
-                        map.setPaintProperty(lid, 'line-width', cs.lineWidthHover)
+                        map.setPaintProperty(lid, 'line-width', csNow.lineWidthHover)
                     }
-                    callbacks.onContourEnter(e, cs, kcs)
-                })
-                map.on('mouseleave', fid, () => {
+                    callbacks.onContourEnter(e, csNow, kcs)
+                }, () => {
                     map.getCanvas().style.cursor = ''
-                    if (cs.changeStyleWhenHover) {
-                        map.setPaintProperty(fid, 'fill-opacity', cs.fillOpacity)
-                        map.setPaintProperty(lid, 'line-color', ps.lineColor)
-                        map.setPaintProperty(lid, 'line-width', cs.lineWidth)
+                    let { csNow, psNow } = getNow()
+                    if (csNow.changeStyleWhenHover && map.getLayer(fid) && map.getLayer(lid)) {
+                        map.setPaintProperty(fid, 'fill-opacity', csNow.fillOpacity)
+                        map.setPaintProperty(lid, 'line-color', psNow.lineColor)
+                        map.setPaintProperty(lid, 'line-width', csNow.lineWidth)
                     }
                     callbacks.onContourLeave()
                 })

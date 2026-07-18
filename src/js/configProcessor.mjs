@@ -143,20 +143,26 @@ export function computeClusterOpts(opt) {
     if (!isnum(cpMaxZoom)) cpMaxZoom = 14; else cpMaxZoom = cdbl(cpMaxZoom)
     let cpLevelNum = get(opt, 'clusterPointsLevelNum', null)
     if (!isnum(cpLevelNum)) cpLevelNum = 3; else cpLevelNum = Math.max(1, Math.round(cdbl(cpLevelNum)))
+    //預設陣列補齊到指定長度: levelNum > 預設長度時依規則外插, 避免靜默降級成較少級數
+    let padArr = (arr, n, fnNext) => {
+        let r = arr.slice(0, n)
+        while (r.length < n) r.push(fnNext(r[r.length - 1]))
+        return r
+    }
     let cpLevelValues = get(opt, 'clusterPointsLevelValues', null)
-    if (!isarr(cpLevelValues) || cpLevelValues.length !== cpLevelNum - 1) cpLevelValues = [10, 100].slice(0, cpLevelNum - 1)
+    if (!isarr(cpLevelValues) || cpLevelValues.length !== cpLevelNum - 1) cpLevelValues = padArr([10, 100], cpLevelNum - 1, (last) => last * 10)
     let cpLevelRadius = get(opt, 'clusterPointsLevelRadius', null)
-    if (!isarr(cpLevelRadius) || cpLevelRadius.length !== cpLevelNum) cpLevelRadius = [10, 15, 20].slice(0, cpLevelNum)
+    if (!isarr(cpLevelRadius) || cpLevelRadius.length !== cpLevelNum) cpLevelRadius = padArr([10, 15, 20], cpLevelNum, (last) => last + 5)
     let cpLevelFillColors = get(opt, 'clusterPointsLevelFillColors', null)
-    if (!isarr(cpLevelFillColors) || cpLevelFillColors.length !== cpLevelNum) cpLevelFillColors = ['rgba(140, 40, 25, 0.75)', 'rgba(255, 125, 50, 0.75)', 'rgba(255, 50, 100, 0.75)'].slice(0, cpLevelNum)
+    if (!isarr(cpLevelFillColors) || cpLevelFillColors.length !== cpLevelNum) cpLevelFillColors = padArr(['rgba(140, 40, 25, 0.75)', 'rgba(255, 125, 50, 0.75)', 'rgba(255, 50, 100, 0.75)'], cpLevelNum, (last) => last)
     let cpLevelLineColors = get(opt, 'clusterPointsLevelLineColors', null)
-    if (!isarr(cpLevelLineColors) || cpLevelLineColors.length !== cpLevelNum) cpLevelLineColors = ['#fff', '#fff', '#fff'].slice(0, cpLevelNum)
+    if (!isarr(cpLevelLineColors) || cpLevelLineColors.length !== cpLevelNum) cpLevelLineColors = padArr(['#fff', '#fff', '#fff'], cpLevelNum, (last) => last)
     let cpLevelLineWidths = get(opt, 'clusterPointsLevelLineWidths', null)
-    if (!isarr(cpLevelLineWidths) || cpLevelLineWidths.length !== cpLevelNum) cpLevelLineWidths = [2, 2, 2].slice(0, cpLevelNum)
+    if (!isarr(cpLevelLineWidths) || cpLevelLineWidths.length !== cpLevelNum) cpLevelLineWidths = padArr([2, 2, 2], cpLevelNum, (last) => last)
     let cpLevelTextSizes = get(opt, 'clusterPointsLevelTextSizes', null)
-    if (!isarr(cpLevelTextSizes) || cpLevelTextSizes.length !== cpLevelNum) cpLevelTextSizes = [12, 12, 12].slice(0, cpLevelNum)
+    if (!isarr(cpLevelTextSizes) || cpLevelTextSizes.length !== cpLevelNum) cpLevelTextSizes = padArr([12, 12, 12], cpLevelNum, (last) => last)
     let cpLevelTextColors = get(opt, 'clusterPointsLevelTextColors', null)
-    if (!isarr(cpLevelTextColors) || cpLevelTextColors.length !== cpLevelNum) cpLevelTextColors = ['#fff', '#fff', '#fff'].slice(0, cpLevelNum)
+    if (!isarr(cpLevelTextColors) || cpLevelTextColors.length !== cpLevelNum) cpLevelTextColors = padArr(['#fff', '#fff', '#fff'], cpLevelNum, (last) => last)
 
     let key = JSON.stringify({
         cpEnabled,

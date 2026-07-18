@@ -60,6 +60,8 @@
 
             <AppBSCDisplayOrderByType v-if="showSubCmp==='displayOrderByType'"></AppBSCDisplayOrderByType>
 
+            <AppBSCHoverInteractions v-if="showSubCmp==='hoverInteractions'"></AppBSCHoverInteractions>
+
             <AppPopupPosition v-if="showSubCmp==='popupPosition'"></AppPopupPosition>
 
             <AppPopupResize v-if="showSubCmp==='popupResize'"></AppPopupResize>
@@ -291,6 +293,7 @@ import AppBSCCenter from './AppBSCCenter.vue'
 import AppBSCZoom from './AppBSCZoom.vue'
 import AppBSCPanelBackgroundColor from './AppBSCPanelBackgroundColor.vue'
 import AppBSCDisplayOrderByType from './AppBSCDisplayOrderByType.vue'
+import AppBSCHoverInteractions from './AppBSCHoverInteractions.vue'
 import AppPopupPosition from './AppPopupPosition.vue'
 import AppPopupResize from './AppPopupResize.vue'
 import AppPBMShow from './AppPBMShow.vue'
@@ -409,6 +412,7 @@ export default {
         AppBSCZoom,
         AppBSCPanelBackgroundColor,
         AppBSCDisplayOrderByType,
+        AppBSCHoverInteractions,
         AppPopupPosition,
         AppPopupResize,
         AppPBMShow,
@@ -530,6 +534,7 @@ export default {
                     'zoom',
                     'panelBackgroundColor',
                     'displayOrderByType',
+                    'hoverInteractions',
                 ],
                 panelBaseMaps: [
                     'panelBaseMaps.show',

@@ -75,7 +75,9 @@ export function applyBaseMaps(map, baseMaps) {
         }
         let tiles = []
         if (bm.type === 'wms') {
-            let u = bm.url; if (!u.includes('?')) u += '?'
+            let u = bm.url
+            if (!u.includes('?')) u += '?'
+            else if (!u.endsWith('?') && !u.endsWith('&')) u += '&' //url 已帶 query 參數時須以 & 續接, 避免直接黏接壞掉
             u += `SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${bm.layers || ''}&STYLES=&FORMAT=image/png&TRANSPARENT=true&SRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}`
             tiles = [u]
         }

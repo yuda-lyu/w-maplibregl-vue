@@ -1191,7 +1191,15 @@ export default {
         changePointSets() {
             let vo = this
             let sets = get(vo, 'opt.pointSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible')); if (isEqual(vo.effPointSetsTemp, eff)) return; vo.effPointSetsTemp = eff
+            let eff = map(sets, (v) => omit(v, 'visible'))
+            if (isEqual(vo.effPointSetsTemp, eff)) {
+                //結構未變: 僅同步 visible(涵蓋外部直接改 opt.pointSets[k].visible 的路徑), 有差異才重新套用顯隱
+                if (vo.syncSetsVisible(vo.pointSets, sets, true)) {
+                    vo.changeItemsDebounce('changePointSets'); if (vo.map && vo.mapLoaded) vo.renderPointSets()
+                }
+                return
+            }
+            vo.effPointSetsTemp = eff
             let fc = get(vo, 'opt.pointSetsClick', null)
             vo.pointSets = map(sets, (ps, kps) => {
                 if (!isestr(get(ps, 'title', null))) ps.title = ''; if (!isestr(get(ps, 'msg', null))) ps.msg = ''
@@ -1298,7 +1306,14 @@ export default {
         },
         changePolylineSets() {
             let vo = this; let sets = get(vo, 'opt.polylineSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible')); if (isEqual(vo.effPolylineSetsTemp, eff)) return; vo.effPolylineSetsTemp = eff
+            let eff = map(sets, (v) => omit(v, 'visible'))
+            if (isEqual(vo.effPolylineSetsTemp, eff)) {
+                if (vo.syncSetsVisible(vo.polylineSets, sets, true)) {
+                    vo.changeItemsDebounce('changePolylineSets'); if (vo.map && vo.mapLoaded) vo.renderPolylineSets()
+                }
+                return
+            }
+            vo.effPolylineSetsTemp = eff
             let fc = get(vo, 'opt.polylineSetsClick', null)
             vo.polylineSets = map(sets, (pls, k) => {
                 if (!isestr(get(pls, 'title', null))) pls.title = ''; if (!isestr(get(pls, 'msg', null))) pls.msg = ''
@@ -1333,7 +1348,14 @@ export default {
         },
         changePolygonSets() {
             let vo = this; let sets = get(vo, 'opt.polygonSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible')); if (isEqual(vo.effPolygonSetsTemp, eff)) return; vo.effPolygonSetsTemp = eff
+            let eff = map(sets, (v) => omit(v, 'visible'))
+            if (isEqual(vo.effPolygonSetsTemp, eff)) {
+                if (vo.syncSetsVisible(vo.polygonSets, sets, true)) {
+                    vo.changeItemsDebounce('changePolygonSets'); if (vo.map && vo.mapLoaded) vo.renderPolygonSets()
+                }
+                return
+            }
+            vo.effPolygonSetsTemp = eff
             let fc = get(vo, 'opt.polygonSetsClick', null)
             vo.polygonSets = map(sets, (pg, k) => {
                 if (!isestr(get(pg, 'title', null))) pg.title = ''; if (!isestr(get(pg, 'msg', null))) pg.msg = ''
@@ -1369,7 +1391,14 @@ export default {
         },
         changeGeojsonSets() {
             let vo = this; let sets = get(vo, 'opt.geojsonSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible')); if (isEqual(vo.effGeojsonSetsTemp, eff)) return; vo.effGeojsonSetsTemp = eff
+            let eff = map(sets, (v) => omit(v, 'visible'))
+            if (isEqual(vo.effGeojsonSetsTemp, eff)) {
+                if (vo.syncSetsVisible(vo.geojsonSets, sets, true)) {
+                    vo.changeItemsDebounce('changeGeojsonSets'); if (vo.map && vo.mapLoaded) vo.renderGeojsonSets()
+                }
+                return
+            }
+            vo.effGeojsonSetsTemp = eff
             let fc = get(vo, 'opt.geojsonSetsClick', null)
             vo.geojsonSets = map(sets, (gj, k) => {
                 if (!isestr(get(gj, 'title', null))) gj.title = ''; if (!isestr(get(gj, 'msg', null))) gj.msg = ''
@@ -1403,7 +1432,14 @@ export default {
         },
         changeImageSets() {
             let vo = this; let sets = get(vo, 'opt.imageSets', null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
-            let eff = map(sets, (v) => omit(v, 'visible')); if (isEqual(vo.effImageSetsTemp, eff)) return; vo.effImageSetsTemp = eff
+            let eff = map(sets, (v) => omit(v, 'visible'))
+            if (isEqual(vo.effImageSetsTemp, eff)) {
+                if (vo.syncSetsVisible(vo.imageSets, sets, false)) {
+                    vo.changeItemsDebounce('changeImageSets'); if (vo.map && vo.mapLoaded) vo.renderImageSets()
+                }
+                return
+            }
+            vo.effImageSetsTemp = eff
             vo.imageSets = map(sets, (im, k) => {
                 if (!isestr(get(im, 'title', null))) im.title = ''; if (!isestr(get(im, 'msg', null))) im.msg = ''
                 if (!isNumber(get(im, 'order', null))) im.order = null; if (!isbol(get(im, 'visible', null))) im.visible = false
@@ -1431,7 +1467,12 @@ export default {
             let contourSets = get(vo, 'opt.contourSets', null); if (!isarr(contourSets)) contourSets = []
             contourSets = cloneDeep(contourSets)
             let effContourSets = map(contourSets, (v) => omit(v, 'visible'))
-            if (isEqual(vo.effContourSetsTemp, effContourSets)) return
+            if (isEqual(vo.effContourSetsTemp, effContourSets)) {
+                if (vo.syncSetsVisible(vo.contourSets, contourSets, false)) {
+                    vo.changeItemsDebounce('changeContourSets'); if (vo.map && vo.mapLoaded) vo.renderContourSets()
+                }
+                return
+            }
             vo.effContourSetsTemp = effContourSets
             let funSetsClick = get(vo, 'opt.contourSetsClick', null)
             vo.contourSets = map(contourSets, (contourSet, kcontourSet) => {
@@ -1530,6 +1571,20 @@ export default {
         },
         changeItems() {
             this.items = buildItemsList(this.imageSets, this.pointSets, this.polylineSets, this.polygonSets, this.geojsonSets, this.contourSets)
+        },
+
+        //同步 opt 端 visible 到已正規化資料並回傳是否有變更。
+        //各 changeXxxSets 的結構 diff 刻意 omit visible(避免面板寫回時雙重渲染),
+        //外部「直接改 opt.xxxSets[k].visible」會走到 eff 相等的早退路徑, 故以此另行同步使其生效
+        syncSetsVisible(normSets, rawSets, defVisible) {
+            let changed = false
+            each(normSets, (v, k) => {
+                let b = get(rawSets, `${k}.visible`, null); if (!isbol(b)) b = defVisible
+                if (v.visible !== b) {
+                    v.visible = b; changed = true
+                }
+            })
+            return changed
         },
 
         toggleItemVisible(i) {

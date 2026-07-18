@@ -1,13 +1,13 @@
 {
   "name": "w-maplibregl-vue",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "main": "dist/w-maplibregl-vue.umd.js",
   "dependencies": {
     "lodash-es": "^4.18.1",
     "maplibre-gl": "^5.24.0",
-    "w-component-vue": "^2.4.71",
-    "w-gis": "^1.0.85",
-    "wsemi": "^1.8.64"
+    "w-component-vue": "^2.4.72",
+    "w-gis": "^1.0.86",
+    "wsemi": "^1.8.65"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "^5.0.8",
@@ -28,7 +28,7 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "test": "mocha --parallel --timeout 60000",
+    "test": "npm run test:e2e",
     "test:e2e": "mocha test/e2e/*.test.mjs --timeout 180000 --reporter list",
     "lint": "vue-cli-service lint",
     "deploy": "gh-pages -d docs"
