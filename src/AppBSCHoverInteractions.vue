@@ -16,6 +16,9 @@
             <div style="padding-bottom:10px;">
                 <button id="btnMutate" style="cursor:pointer; padding:4px 10px;" @click="mutateRuntime">runtime 變更: 折線換紅色 + 隱藏多邊形</button>
                 <button id="btnShiftSets" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="shiftSets">runtime 變更: 頭部插入一組 pointSet(索引位移)</button>
+                <button id="btnToggleImage" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="toggleImage">runtime 變更: 切換影像疊圖顯示</button>
+                <button id="btnSwapClick" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="swapClick">runtime 變更: 更換全域點擊函數</button>
+                <span id="clickLog" style="margin-left:8px; font-size:0.85rem; color:#a3c;"></span>
             </div>
 
             <div style="position:relative;">
@@ -35,10 +38,22 @@
                             <div style="font-size:0.75rem; color:#777;">{{ props.point.title }}</div>
                         </div>
                     </template>
+                    <template v-slot:polyline-popup="props">
+                        <div style="padding:12px; width:200px;">
+                            <div style="font-size:0.9rem; color:#26a;">[Polyline popup]</div>
+                            <div style="font-size:0.8rem; color:#777;">{{ props.polylineSet.title }}</div>
+                        </div>
+                    </template>
                     <template v-slot:polyline-tooltip="props">
                         <div style="padding:10px; width:180px;">
                             <div style="font-size:0.85rem; color:#26a;">[Polyline tooltip]</div>
                             <div style="font-size:0.75rem; color:#777;">{{ props.polylineSet.title }}</div>
+                        </div>
+                    </template>
+                    <template v-slot:polygon-popup="props">
+                        <div style="padding:12px; width:200px;">
+                            <div style="font-size:0.9rem; color:#4347de;">[Polygon popup]</div>
+                            <div style="font-size:0.8rem; color:#777;">{{ props.polygonSet.title }}</div>
                         </div>
                     </template>
                     <template v-slot:polygon-tooltip="props">
@@ -47,10 +62,21 @@
                             <div style="font-size:0.75rem; color:#777;">{{ props.polygonSet.title }}</div>
                         </div>
                     </template>
+                    <template v-slot:geojson-popup="props">
+                        <div style="padding:12px; width:200px;">
+                            <div style="font-size:0.9rem; color:#2a7;">[Geojson popup]</div>
+                            <div style="font-size:0.8rem; color:#777;">{{ props.geojsonSet.title }}</div>
+                        </div>
+                    </template>
                     <template v-slot:geojson-tooltip="props">
                         <div style="padding:10px; width:180px;">
                             <div style="font-size:0.85rem; color:#2a7;">[Geojson tooltip]</div>
                             <div style="font-size:0.75rem; color:#777;">{{ props.geojsonSet.title }}</div>
+                        </div>
+                    </template>
+                    <template v-slot:contour-popup>
+                        <div style="padding:12px; width:200px;">
+                            <div style="font-size:0.9rem; color:#a52;">[Contour popup]</div>
                         </div>
                     </template>
                     <template v-slot:contour-tooltip>
@@ -115,6 +141,14 @@ export default {
                         lineWidth: 16,
                         visible: true,
                     },
+                    {
+                        title: 'polyline B',
+                        msg: 'second line(供跨組 hover/click 測試)',
+                        latLngs: [[23.96, 120.85], [23.96, 120.91]],
+                        lineColor: 'rgba(30,180,90,1)',
+                        lineWidth: 16,
+                        visible: true,
+                    },
                 ],
                 polygonSets: [
                     {
@@ -122,6 +156,13 @@ export default {
                         msg: 'polygon for hover',
                         latLngs: [[[23.90, 120.98], [23.90, 121.02], [23.94, 121.02], [23.94, 120.98]]],
                         fillColor: 'rgba(80,120,255,0.5)',
+                        visible: true,
+                    },
+                    {
+                        title: 'polygon B',
+                        msg: 'adjacent polygon(與 A 部分重疊, 供跨組 hover 與重疊點擊測試)',
+                        latLngs: [[[23.90, 121.01], [23.90, 121.05], [23.94, 121.05], [23.94, 121.01]]],
+                        fillColor: 'rgba(255,150,60,0.7)',
                         visible: true,
                     },
                 ],
@@ -141,6 +182,39 @@ export default {
                                     },
                                 },
                             ],
+                        },
+                        visible: true,
+                    },
+                    {
+                        title: 'geojson B',
+                        msg: 'adjacent geojson polygon(供跨組 hover/click 測試)',
+                        geojson: {
+                            type: 'FeatureCollection',
+                            features: [
+                                {
+                                    type: 'Feature',
+                                    properties: {},
+                                    geometry: {
+                                        type: 'Polygon',
+                                        coordinates: [[[121.15, 23.90], [121.19, 23.90], [121.19, 23.94], [121.15, 23.94], [121.15, 23.90]]],
+                                    },
+                                },
+                            ],
+                        },
+                        visible: true,
+                    },
+                ],
+                imageSets: [
+                    {
+                        title: 'image A',
+                        msg: 'raster overlay(data-URI 色塊)',
+                        image: {
+                            //1x1 紅色 PNG, 拉伸鋪滿範圍(免網路, e2e 穩定)
+                            url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+                            lngMin: 121.06,
+                            lngMax: 121.10,
+                            latMin: 23.96,
+                            latMax: 24.00,
                         },
                         visible: true,
                     },
@@ -167,6 +241,17 @@ export default {
         mutateRuntime: function() {
             this.$set(this.opt.polylineSets[0], 'lineColor', 'rgba(230,30,30,1)')
             this.$set(this.opt.polygonSets[0], 'visible', false)
+        },
+        //runtime 更換全域點擊函數(欄位初始不存在, Vue 2 須用 $set 新增才能觸發 watcher):
+        //點擊點圖徵時新函數將訊息寫入 #clickLog, 供驗證更換有生效
+        swapClick: function() {
+            this.$set(this.opt, 'pointSetsClick', function(msg) {
+                document.querySelector('#clickLog').textContent = `swapped:${msg.point.title}`
+            })
+        },
+        //直接改 opt 的 visible 切換影像疊圖(驗證 visible 直改路徑與影像重建)
+        toggleImage: function() {
+            this.opt.imageSets[0].visible = !this.opt.imageSets[0].visible
         },
         //於陣列頭部插入一組新 pointSet(索引位移情境): 其後各組整體位移一格, 驗證位移後各組行為仍正確
         shiftSets: function() {

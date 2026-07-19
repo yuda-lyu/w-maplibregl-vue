@@ -46,6 +46,15 @@ function baseMapKeys(baseMaps) {
  */
 export function applyBaseMaps(map, baseMaps) {
     if (!map) return
+    //先掃除既有全部 basemap 圖層/來源: 結構性重套時, 被刪除或 key 變更(如換 url)的舊條目不得殘留——
+    //否則舊圖層持續顯示且面板已無項目可控制, 反覆變更會累積 source/layer
+    let style = map.getStyle ? (map.getStyle() || {}) : {}
+    each((style.layers || []), (l) => {
+        if (l && isestr(l.id) && l.id.indexOf('basemap-layer-') === 0 && map.getLayer(l.id)) map.removeLayer(l.id)
+    })
+    each(Object.keys(style.sources || {}), (id) => {
+        if (id.indexOf('basemap-src-') === 0 && map.getSource(id)) map.removeSource(id)
+    })
     let keys = baseMapKeys(baseMaps)
     let addBaseMapLayer = (bm, k) => {
         let srcId = `basemap-src-${keys[k]}`; let layerId = `basemap-layer-${keys[k]}`
@@ -69,6 +78,10 @@ export function applyBaseMaps(map, baseMaps) {
             }
             else if (layerType === 'fill') {
                 paint = { 'fill-color': '#aaaaaa', 'fill-opacity': op, 'fill-opacity-transition': { duration: 0, delay: 0 } }
+            }
+            else if (layerType === 'line') {
+                //初始即套用 opacity(與 setOverlayOpacity/updateBaseMapPaint 之更新路徑一致, 不可漏掉初建)
+                paint = { 'line-opacity': op, 'line-opacity-transition': { duration: 0, delay: 0 } }
             }
             map.addLayer({ 'id': layerId, 'type': layerType, 'source': srcId, 'source-layer': sourceLayer, paint, 'layout': { visibility: bm.visible ? 'visible' : 'none' } })
             return
@@ -158,10 +171,17 @@ export function applyTerrain(map, terrainMap, trackedLayerIds) {
             map.addSource('terrain-hillshade-src', hillshadeSrcSpec)
             hillshadeSourceId = 'terrain-hillshade-src'
         }
+        //以「實際 style 疊序」找最底層的資料圖層作為插入點: tracked 為插入序, 與 displayOrderByType
+        //重排後之實際疊序不同, 依 tracked 首項會把 hillshade 插到部分資料圖層之上
         let insertBefore = null
-        for (let lid of (trackedLayerIds || [])) {
-            if (map.getLayer(lid)) {
-                insertBefore = lid; break
+        let tset = {}
+        each((trackedLayerIds || []), (lid) => {
+            tset[lid] = true
+        })
+        let sty = map.getStyle ? (map.getStyle() || {}) : {}
+        for (let l of (sty.layers || [])) {
+            if (l && tset[l.id] && map.getLayer(l.id)) {
+                insertBefore = l.id; break
             }
         }
         let hillshadeSpec = {
@@ -330,12 +350,13 @@ export function updateBaseMapsIncremental(map, baseMaps) {
         updateBaseMapPaint(map, baseMaps, k)
         map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
     })
-    // 2) 疊加層(colorShade 空字串)依陣列序 moveLayer 至首個資料圖層之下; 底圖恆在最底, 不動
+    // 2) 疊加層(colorShade 空字串)依陣列序 moveLayer 至「hillshade(若有)之下, 否則首個資料圖層之下」;
+    //    維持「底圖 < 疊加層 < hillshade < 資料」疊序與完整重建路徑一致, 底圖恆在最底, 不動
     let dataPrefixes = ['image-', 'contour-', 'polygon-', 'geojson-', 'polyline-', 'point-']
     let beforeId
     let style = map.getStyle()
     if (style && isarr(style.layers)) {
-        let hit = style.layers.find((l) => l && isestr(l.id) && dataPrefixes.some((p) => l.id.indexOf(p) === 0))
+        let hit = style.layers.find((l) => l && isestr(l.id) && (l.id === 'terrain-hillshade' || dataPrefixes.some((p) => l.id.indexOf(p) === 0)))
         if (hit) beforeId = hit.id
     }
     each(baseMaps, (bm, k) => {

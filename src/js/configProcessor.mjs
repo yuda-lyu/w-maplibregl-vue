@@ -2,6 +2,7 @@
  * configProcessor.mjs
  * 負責將傳入的 opt prop 正規化為各面板配置，全部為純函式（無副作用）
  */
+import each from 'lodash-es/each.js'
 import get from 'lodash-es/get.js'
 import cloneDeep from 'lodash-es/cloneDeep.js'
 import size from 'lodash-es/size.js'
@@ -45,6 +46,11 @@ export function computePanelBaseMaps(opt, currentBaseMaps, currentTerrainMapTemp
         p.baseMaps = size(currentBaseMaps) === 0 ? cloneDeep(defBaseMapsData) : cloneDeep(currentBaseMaps)
     }
     p = cloneDeep(p); p.style = buildPanelStyle(p)
+
+    //colorShade 未給時補文件預設 ''(疊加層): 使面板分類(radio/checkbox)、switchBaseMap 與渲染端 isestr 判斷一致
+    each(p.baseMaps, (bm) => {
+        if (isobj(bm) && !isstr(bm.colorShade)) bm.colorShade = ''
+    })
 
     let tm = get(p, 'terrainMap', null)
     if (!isobj(tm)) tm = cloneDeep(defTerrainMapData)

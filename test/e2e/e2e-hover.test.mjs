@@ -11,7 +11,7 @@
 //   5. 滑鼠移出至空白處 → cursor 還原、tooltip 消失(等值線樣式還原)
 //   6. (E2E-009) 滑入點後點擊 → point popup 開啟
 //
-// 按鈕全清單比對: 範例頁可點元素 = [子選單項, 地圖 canvas, #btnMutate, #btnShiftSets] — 皆有真實點擊/滑入。
+// 按鈕全清單比對: 範例頁可點元素 = [子選單項, 地圖 canvas, #btnMutate, #btnShiftSets, #btnToggleImage, #btnSwapClick] — 皆有真實點擊/滑入。
 // act 全走 user-facing(真實滑鼠移動/點擊); assert 走 user-facing(canvas cursor 樣式,
 // tooltip DOM 文字, popup DOM 文字, 等值線 hover 前後畫面區域像素差異)。
 // 無 i18n 文字差異(範例固定中英標籤), 故單一變體。每個 it() 各自 new browser。
@@ -39,6 +39,17 @@
 //               直接改 opt visible 的多邊形即時隱藏(hover 無 cursor/tooltip); 折線 hover 仍正常
 //   - E2E-011 陣列頭部插入 pointSet(索引位移): 新組可 hover; 位移後原 circle/icon 點
 //               hover tooltip 資料仍正確(無錯置), 點擊 popup 資料正確
+//   - E2E-012 多組多邊形(A/B 部分重疊): 各組專屬區 hover tooltip 帶各自 title;
+//               跨組直接移動 tooltip 切換; 各組專屬區點擊 popup 資料正確; 重疊區點擊上層(後者 B)勝
+//   - E2E-013 等值線點擊: 點擊等值線面 → [Contour popup] 開啟
+//   - E2E-014 多組 GeoJSON: 各組 hover tooltip 帶各自 title, 跨組直接移動 tooltip 切換,
+//               各組點擊 popup 資料正確
+//   - E2E-015 多組折線: 各組 hover tooltip 帶各自 title, 跨組直接移動 tooltip 切換,
+//               各組點擊 popup 資料正確
+//   - E2E-016 影像疊圖: 載入即顯示(區域像素含影像); 點 #btnToggleImage 隱藏 → 區域還原為底圖;
+//               再點顯示 → 區域重現影像(與初始一致)
+//   - E2E-017 runtime 更換全域點擊函數: 點 #btnSwapClick 後點擊 circle 點 →
+//               新函數生效, #clickLog 顯示其寫入內容
 import assert from 'assert'
 import { chromium } from 'playwright'
 import { baseUrl, startServer, waitUntilExist } from './e2e-setup.mjs'
@@ -293,6 +304,164 @@ describe('e2e-hover', function() {
         await waitUntilExist(page, 'popup 帶 point-circle', () => {
             let el = document.querySelector('.maplibregl-popup-content')
             return !!el && el.innerText.indexOf('[Point popup]') >= 0 && el.innerText.indexOf('point-circle') >= 0
+        })
+    })
+
+    it('E2E-012 多組多邊形: 各組 tooltip/popup 正確, 跨組移動 tooltip 切換, 重疊區點擊上層勝', async function() {
+        await gotoExample()
+        //在所有 .maplibregl-popup-content(含 tooltip)中找同時含 popup 標記與指定文字者
+        let assertPopupWith = async (label, inc) => {
+            await waitUntilExist(page, label, (arg) => {
+                let els = document.querySelectorAll('.maplibregl-popup-content')
+                for (let el of els) {
+                    if (el.innerText.indexOf(arg.mk) >= 0 && el.innerText.indexOf(arg.inc) >= 0) return true
+                }
+                return false
+            }, { arg: { mk: '[Polygon popup]', inc } })
+        }
+        //spec: A 專屬區 hover → tooltip 帶 polygon A
+        await hoverAtUntilPointer(23.92, 120.995)
+        await assertTooltip('polygon A')
+        //spec: 直接跳至 B 專屬區(跨組移動) → tooltip 切換為 polygon B(且不再含 polygon A)
+        await hoverAt(23.92, 121.035)
+        await assertTooltip('polygon B')
+        await waitUntilExist(page, 'tooltip 已切換離開 polygon A', () => {
+            let el = document.querySelector('.wlv2-tooltip')
+            return !!el && el.innerText.indexOf('polygon A') < 0
+        })
+        //spec: B 專屬區點擊 → popup 帶 polygon B
+        let pb = latLngToCanvasXY(23.92, 121.035, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + pb.x, cbb.y + pb.y)
+        await assertPopupWith('popup polygon B', 'polygon B')
+        //spec: 重疊區(A∩B)點擊 → 上層(陣列後者 B)勝
+        let po = latLngToCanvasXY(23.92, 121.015, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + po.x, cbb.y + po.y)
+        await assertPopupWith('重疊區 popup 開上層 polygon B', 'polygon B')
+        //spec: A 專屬區點擊 → popup 帶 polygon A
+        let pa = latLngToCanvasXY(23.92, 120.995, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + pa.x, cbb.y + pa.y)
+        await assertPopupWith('popup polygon A', 'polygon A')
+    })
+
+    it('E2E-013 等值線點擊: 點擊等值線面 → contour popup 開啟', async function() {
+        await gotoExample()
+        await hoverAtUntilPointer(24.00, 121.18)
+        let p = latLngToCanvasXY(24.00, 121.18, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + p.x, cbb.y + p.y)
+        //spec: 點擊等值線面開啟 contour popup
+        await waitUntilExist(page, 'contour popup 開啟', () => {
+            let els = document.querySelectorAll('.maplibregl-popup-content')
+            for (let el of els) {
+                if (el.innerText.indexOf('[Contour popup]') >= 0) return true
+            }
+            return false
+        })
+    })
+
+    it('E2E-014 多組 GeoJSON: 各組 tooltip/popup 正確, 跨組移動 tooltip 切換', async function() {
+        await gotoExample()
+        let assertGjPopup = async (label, inc) => {
+            await waitUntilExist(page, label, (arg) => {
+                let els = document.querySelectorAll('.maplibregl-popup-content')
+                for (let el of els) {
+                    if (el.innerText.indexOf(arg.mk) >= 0 && el.innerText.indexOf(arg.inc) >= 0) return true
+                }
+                return false
+            }, { arg: { mk: '[Geojson popup]', inc } })
+        }
+        //spec: A 組 hover → tooltip 帶 geojson A
+        await hoverAtUntilPointer(23.92, 121.12)
+        await assertTooltip('geojson A')
+        //spec: 直接跳至 B 組 → tooltip 切換為 geojson B(且不再含 geojson A)
+        await hoverAt(23.92, 121.17)
+        await assertTooltip('geojson B')
+        await waitUntilExist(page, 'tooltip 已切換離開 geojson A', () => {
+            let el = document.querySelector('.wlv2-tooltip')
+            return !!el && el.innerText.indexOf('geojson A') < 0
+        })
+        //spec: B 組點擊 → popup 帶 geojson B
+        let pb = latLngToCanvasXY(23.92, 121.17, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + pb.x, cbb.y + pb.y)
+        await assertGjPopup('popup geojson B', 'geojson B')
+        //spec: A 組點擊 → popup 帶 geojson A
+        let pa = latLngToCanvasXY(23.92, 121.12, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + pa.x, cbb.y + pa.y)
+        await assertGjPopup('popup geojson A', 'geojson A')
+    })
+
+    it('E2E-015 多組折線: 各組 tooltip/popup 正確, 跨組移動 tooltip 切換', async function() {
+        await gotoExample()
+        let assertPlPopup = async (label, inc) => {
+            await waitUntilExist(page, label, (arg) => {
+                let els = document.querySelectorAll('.maplibregl-popup-content')
+                for (let el of els) {
+                    if (el.innerText.indexOf(arg.mk) >= 0 && el.innerText.indexOf(arg.inc) >= 0) return true
+                }
+                return false
+            }, { arg: { mk: '[Polyline popup]', inc } })
+        }
+        //spec: A 組 hover → tooltip 帶 polyline A
+        await hoverAtUntilPointer(23.92, 120.88)
+        await assertTooltip('polyline A')
+        //spec: 直接跳至 B 組 → tooltip 切換為 polyline B(且不再含 polyline A)
+        await hoverAtUntilPointer(23.96, 120.88)
+        await assertTooltip('polyline B')
+        await waitUntilExist(page, 'tooltip 已切換離開 polyline A', () => {
+            let el = document.querySelector('.wlv2-tooltip')
+            return !!el && el.innerText.indexOf('polyline A') < 0
+        })
+        //spec: B 組點擊 → popup 帶 polyline B
+        let pb = latLngToCanvasXY(23.96, 120.88, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + pb.x, cbb.y + pb.y)
+        await assertPlPopup('popup polyline B', 'polyline B')
+        //spec: A 組點擊 → popup 帶 polyline A
+        let pa = latLngToCanvasXY(23.92, 120.88, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + pa.x, cbb.y + pa.y)
+        await assertPlPopup('popup polyline A', 'polyline A')
+    })
+
+    it('E2E-016 影像疊圖: 顯示/隱藏/重現', async function() {
+        await gotoExample()
+        let p = latLngToCanvasXY(23.98, 121.08, cbb.width, cbb.height)
+        let clip = { x: cbb.x + p.x - 15, y: cbb.y + p.y - 15, width: 30, height: 30 }
+        //spec: 載入即顯示影像(此區域為影像色塊)
+        let shotWith = await captureRegionStable(clip)
+
+        await page.locator('#btnToggleImage').click()
+        //spec: 隱藏後區域還原為底圖(與顯示中不同)
+        let shotWithout = null
+        for (let i = 0; i < 10; i++) {
+            await page.waitForTimeout(300)
+            let s = await page.screenshot({ clip })
+            if (!s.equals(shotWith)) {
+                shotWithout = await captureRegionStable(clip); break
+            }
+        }
+        assert.ok(shotWithout && !shotWithout.equals(shotWith), '隱藏影像後區域畫面應改變(還原為底圖)')
+
+        await page.locator('#btnToggleImage').click()
+        //spec: 再顯示 → 區域重現影像(與初始一致)
+        let restored = false
+        for (let i = 0; i < 10; i++) {
+            await page.waitForTimeout(300)
+            let s = await page.screenshot({ clip })
+            if (s.equals(shotWith)) {
+                restored = true; break
+            }
+        }
+        assert.ok(restored, '重新顯示後區域畫面應與初始影像一致')
+    })
+
+    it('E2E-017 runtime 更換全域點擊函數: 更換後點擊即呼叫新函數', async function() {
+        await gotoExample()
+        await page.locator('#btnSwapClick').click()
+        await page.waitForTimeout(600) //給 watcher/debounce 傳播時間
+        //spec: 更換 opt.pointSetsClick 後, 點擊點圖徵應呼叫新函數(寫入 #clickLog)
+        let p = latLngToCanvasXY(24.08, 120.88, cbb.width, cbb.height)
+        await page.mouse.click(cbb.x + p.x, cbb.y + p.y)
+        await waitUntilExist(page, '#clickLog 顯示新函數寫入內容', () => {
+            let el = document.querySelector('#clickLog')
+            return !!el && el.textContent.indexOf('swapped:point-circle') >= 0
         })
     })
 

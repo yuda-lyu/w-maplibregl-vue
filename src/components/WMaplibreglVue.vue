@@ -405,7 +405,7 @@ import uiRes from '../uiRes.mjs'
 import { createMap, applyProjection as _applyProjection } from '../js/mapCore.mjs'
 import { applyBaseMaps, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
-import { clearTrackedByPrefix, clearTrackedMarkersByPrefix, removeStaleSetLayers, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
+import { clearTrackedByPrefix, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
 import { createDirectionalPopup, recheckSinglePopupDir, registerIconImage } from '../js/popupManager.mjs'
 import { renderPointSets as renderPointSetsImpl, renderPolylineSets as renderPolylineSetsImpl, renderPolygonSets as renderPolygonSetsImpl, renderGeojsonSets as renderGeojsonSetsImpl, renderImageSets as renderImageSetsImpl, renderContourSets as renderContourSetsImpl } from '../js/layerRenderers.mjs'
 import { getMapObject as _getMapObject, calcPanToCenter, findPointById, resolveFeatureById } from '../js/publicApi.mjs'
@@ -511,6 +511,7 @@ const defPanelsOrder = ['panelBaseMaps', 'panelLabels', 'panelScale', 'panelComp
  * @vue-prop {Array} [opt.pointSets=[]] 輸入點集合陣列，各元素為物件，預設[]
  * @vue-prop {String} [opt.pointSets[i].title=''] 輸入第i個點集合的標題字串，預設''
  * @vue-prop {String} [opt.pointSets[i].msg=''] 輸入第i個點集合的說明字串，預設''
+ * @vue-prop {String} [opt.pointSets[i].key=null] 輸入第i個點集合的穩定識別鍵字串，需於陣列內唯一；提供後陣列插入或重排時該組身分不變(未變更組可增量跳過不重建)，未給則以陣列索引識別，預設null
  * @vue-prop {Number} [opt.pointSets[i].order=null] 輸入第i個點集合的排序用數字，預設null
  * @vue-prop {Boolean} [opt.pointSets[i].visible=true] 輸入是否顯示第i個點集合布林值，預設true
  * @vue-prop {String} [opt.pointSets[i].type='circle'] 輸入第i個點集合的預設呈現類型字串，可選'circle'(圓)、'icon'(圖標)，預設'circle'
@@ -594,6 +595,7 @@ const defPanelsOrder = ['panelBaseMaps', 'panelLabels', 'panelScale', 'panelComp
  * @vue-prop {Array} [opt.imageSets=[]] 輸入影像集合陣列，各元素為物件，預設[]
  * @vue-prop {String} [opt.imageSets[i].title=''] 輸入第i個影像集合的標題字串，預設''
  * @vue-prop {String} [opt.imageSets[i].msg=''] 輸入第i個影像集合的說明字串，預設''
+ * @vue-prop {String} [opt.imageSets[i].key=null] 輸入第i個影像集合的穩定識別鍵字串，需於陣列內唯一；提供後陣列插入或重排時該組身分不變(未變更組不重載影像)，未給則以陣列索引識別，預設null
  * @vue-prop {Number} [opt.imageSets[i].order=null] 輸入第i個影像集合的排序用數字，預設null
  * @vue-prop {Boolean} [opt.imageSets[i].visible=false] 輸入是否顯示第i個影像集合布林值，預設false
  * @vue-prop {Object} [opt.imageSets[i].image={}] 輸入第i個影像集合的影像來源物件，含url(影像連結字串)與lngMin/lngMax/latMin/latMax(四至經緯度數字)，預設{}
@@ -680,7 +682,6 @@ export default {
             items: [],
             trackedSourceIds: [],
             trackedLayerIds: [],
-            trackedMarkers: [],
 
             displayOrderByType: true, //圖徵依型別面積序堆疊(點>線>面類>影像), 點擊命中小面積圖徵; false=維持插入序
             raiseOrderPending: false, //圖層型別重排的 idle 補重排去抖旗標
@@ -722,7 +723,6 @@ export default {
             activePointSetTooltip: {},
 
             baseMapsDataTemp: [],
-            contourSubCounts: {}, // { [kcs]: Number } 等值線子層數量追蹤
             prevClusterKey: '',
         }
     },
@@ -789,7 +789,7 @@ export default {
 
         /** 比例尺文字 */
         scaleText() {
-            let lat = this.currentCenter[0] || 23.5
+            let lat = isNumber(this.currentCenter[0]) ? this.currentCenter[0] : 23.5 //緯度 0 為有效值, 不可用 || 回退
             let mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, this.currentZoom)
             let d = mpp * 80
             return d >= 1000 ? Math.round(d / 1000) + ' km' : Math.round(d) + ' m'
@@ -984,7 +984,6 @@ export default {
             if (clusterChanged && vo.map && vo.mapLoaded) {
                 let t = clearTrackedByPrefix(vo.map, 'point-', vo.trackedLayerIds, vo.trackedSourceIds)
                 vo.trackedLayerIds = t.layerIds; vo.trackedSourceIds = t.sourceIds
-                vo.trackedMarkers = clearTrackedMarkersByPrefix('point', vo.trackedMarkers)
                 vo.renderPointSets()
             }
 
@@ -1029,6 +1028,8 @@ export default {
                         vo.applyBaseMaps()
                         // applyBaseMaps 會移除後重新加入底圖圖層（無 beforeId），使底圖排在資料圖層之上；
                         // 因此需將所有已追蹤的資料圖層移回最頂層
+                        //hillshade 不在 tracked 清單, 先單獨壓回(維持「底圖上、資料下」之疊序)
+                        if (vo.map.getLayer('terrain-hillshade')) vo.map.moveLayer('terrain-hillshade')
                         each(vo.trackedLayerIds, (lid) => {
                             if (vo.map.getLayer(lid)) vo.map.moveLayer(lid)
                         })
@@ -1177,10 +1178,6 @@ export default {
             this.trackedLayerIds = t.layerIds; this.trackedSourceIds = t.sourceIds
         },
 
-        clearTrackedMarkersByPrefix(prefix) {
-            this.trackedMarkers = clearTrackedMarkersByPrefix(prefix, this.trackedMarkers)
-        },
-
         // -- 點 --
         changePointSetsDebounce() {
             this.dbcChangePointSets(() => {
@@ -1188,14 +1185,19 @@ export default {
             })
         },
         //六型別 changeXxxSets 共用流程: cloneDeep → 結構 diff(omit visible) → 早退時僅同步 visible → normalize → 面板清單 + render。
-        //o: { optKey, tempKey, setsKey, defVisible, normalize(sets), render(), renderOnIdleIfNotLoaded }
+        //o: { optKey, tempKey, setsKey, defVisible, clickKey, normalize(sets), render(), renderOnIdleIfNotLoaded }
         //注意: o.defVisible 須與該型別 normalize 內的 visible 預設值一致(point/polyline/polygon/geojson=true, image/contour=false),
         //兩處不一致會使「visible 同步早退」與「完整 normalize」對缺省 visible 的解讀不同
         processSetsChange(o) {
             let vo = this
             let sets = get(vo, `opt.${o.optKey}`, null); if (!isarr(sets)) sets = []; sets = cloneDeep(sets)
             let eff = map(sets, (v) => omit(v, 'visible'))
-            if (isEqual(vo[o.tempKey], eff)) {
+            //全域 click 函數(opt.xxxSetsClick)不在 eff 內(位於 sets 之外), 須另以參考比對偵測——
+            //否則 runtime 只更換 click 函數時會被結構早退擋下, 新函數永不進正規化資料
+            if (!vo._effClickFns) vo._effClickFns = {} //刻意不進 reactive data(僅存函式參考快照)
+            let fcNow = o.clickKey ? get(vo, `opt.${o.clickKey}`, null) : null
+            let clickChanged = o.clickKey ? vo._effClickFns[o.clickKey] !== fcNow : false
+            if (!clickChanged && isEqual(vo[o.tempKey], eff)) {
                 //結構未變: 僅同步 visible(涵蓋外部直接改 opt.xxxSets[k].visible 的路徑), 有差異才重新套用顯隱
                 if (vo.syncSetsVisible(vo[o.setsKey], sets, o.defVisible)) {
                     vo.changeItemsDebounce(); if (vo.map && vo.mapLoaded) o.render()
@@ -1203,6 +1205,7 @@ export default {
                 return
             }
             vo[o.tempKey] = eff
+            if (o.clickKey) vo._effClickFns[o.clickKey] = fcNow
             vo[o.setsKey] = o.normalize(sets)
             vo.changeItemsDebounce()
             if (vo.map) {
@@ -1218,6 +1221,7 @@ export default {
                 tempKey: 'effPointSetsTemp',
                 setsKey: 'pointSets',
                 defVisible: true,
+                clickKey: 'pointSetsClick',
                 renderOnIdleIfNotLoaded: true, //點圖層允許 map 尚未 load 完就排程渲染(once idle)
                 render: () => vo.renderPointSets(),
                 normalize: (sets) => {
@@ -1236,14 +1240,14 @@ export default {
                         })
                         return { id: `pointSet-${kid}`, ...ps, kid, funSetsClick: fc }
                     })
-                    //kid 查找表(刻意不進 reactive data): 事件 handler 以 _kid 取「最新」資料 / 反查當前索引。
+                    //kid 查找表(刻意不進 reactive data): 事件 handler 以 _kid 取「最新」資料。
                     //key 重複時後者覆蓋前者(同 Vue :key 約定)
-                    let byKid = {}; let kidIdx = {}
-                    each(norm, (ps, kps) => {
-                        byKid[ps.kid] = ps; kidIdx[ps.kid] = kps
+                    let byKid = {}
+                    each(norm, (ps) => {
+                        if (byKid[ps.kid] !== undefined) console.warn(`[WMaplibreglVue] pointSets 有重複 key「${ps.kid}」: 各組將共用同一組圖層 id 互相覆蓋, 請保持 key 於陣列內唯一`)
+                        byKid[ps.kid] = ps
                     })
                     vo.pointSetsByKid = byKid
-                    vo.pointSetKidToIndex = kidIdx
                     return norm
                 },
             })
@@ -1251,9 +1255,7 @@ export default {
 
         renderPointSets() {
             let vo = this
-            // 過渡期清理：移除舊的 DOM markers
-            vo.trackedMarkers = clearTrackedMarkersByPrefix('point', vo.trackedMarkers)
-            let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds, markers: vo.trackedMarkers }
+            let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
             //過期清理改於 impl 內以 kid 判斷(索引式 removeStaleSetLayers 會誤刪位移後的組)
             renderPointSetsImpl(vo.map, vo.pointSets, vo.clusterOpts, tracked, {
                 registerIcon: (key, src, w, h) => registerIconImage(vo.map, key, src, w, h),
@@ -1277,13 +1279,12 @@ export default {
                         }
                     }
                     vo.activePoint = ptData; vo.activePointSet = psData
-                    //以 kid 反查當前索引: 跳過重建的組其 feature _kps 為舊索引, 直接用會使 owner 對不上顯隱切換的關閉路徑
-                    let kiPop = get(vo, ['pointSetKidToIndex', p._kid], null); if (!isNumber(kiPop)) kiPop = p._kps
                     vo.$nextTick(() => {
                         let refInner = vo.$refs.refPointPopupInner; if (!refInner || !refInner.innerHTML.trim()) return
                         vo.closeAllPopupsIfOnlyone()
                         vo.featurePopup = createDirectionalPopup(vo.map, coords, refInner, vo.popupPosition, 0, { maxWidth: 'none' }, popAnchor)
-                        vo.featurePopupOwner = `pointSets.${kiPop}`
+                        //owner 以組身分(kid)記錄: 索引會因 keyed 重排位移, 面板隱藏之關閉路徑由 closePopupByOwner 轉譯對應
+                        vo.featurePopupOwner = `pointSets.k:${p._kid}`
                     })
                 },
                 onPointEnter: (ptData, psData, p, coords) => {
@@ -1301,14 +1302,13 @@ export default {
                         }
                     }
                     vo.activePointTooltip = ptData; vo.activePointSetTooltip = psData
-                    let kiTip = get(vo, ['pointSetKidToIndex', p._kid], null); if (!isNumber(kiTip)) kiTip = p._kps
                     vo.$nextTick(() => {
                         let refEl = vo.$refs.refPointTooltip; if (!refEl) return
                         let html = refEl.innerHTML.trim(); if (!html) return
                         vo.hideFeatureTooltip()
                         let ct = document.createElement('div'); ct.innerHTML = html
                         vo.featureTooltip = createDirectionalPopup(vo.map, coords, ct, vo.tooltipPosition, 0, { closeButton: false, closeOnClick: false, maxWidth: 'none', className: 'wlv2-tooltip' }, tipAnchor)
-                        vo.featureTooltipOwner = `pointSets.${kiTip}`
+                        vo.featureTooltipOwner = `pointSets.k:${p._kid}` //owner 以組身分(kid)記錄, 同 popup
                     })
                 },
                 onPointLeave: () => {
@@ -1321,7 +1321,6 @@ export default {
             })
             vo.trackedSourceIds = tracked.sourceIds
             vo.trackedLayerIds = tracked.layerIds
-            vo.trackedMarkers = tracked.markers
             vo.scheduleRaiseFeatureLayers()
         },
 
@@ -1338,6 +1337,7 @@ export default {
                 tempKey: 'effPolylineSetsTemp',
                 setsKey: 'polylineSets',
                 defVisible: true,
+                clickKey: 'polylineSetsClick',
                 render: () => vo.renderPolylineSets(),
                 normalize: (sets) => {
                     let fc = get(vo, 'opt.polylineSetsClick', null)
@@ -1354,7 +1354,7 @@ export default {
         renderPolylineSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
-            removeStaleSetLayers(vo.map, tracked, 'polyline-', vo.polylineSets.length)
+            //聚合渲染(單 source + 1 層, id 無數字尾綴): 過期/無可見組之清理由 impl 內自行處理
             renderPolylineSetsImpl(vo.map, vo.polylineSets, tracked, {
                 shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
@@ -1378,6 +1378,7 @@ export default {
                 tempKey: 'effPolygonSetsTemp',
                 setsKey: 'polygonSets',
                 defVisible: true,
+                clickKey: 'polygonSetsClick',
                 render: () => vo.renderPolygonSets(),
                 normalize: (sets) => {
                     let fc = get(vo, 'opt.polygonSetsClick', null)
@@ -1395,7 +1396,7 @@ export default {
         renderPolygonSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
-            removeStaleSetLayers(vo.map, tracked, 'polygon-', vo.polygonSets.length)
+            //聚合渲染(單 source + 2 層, id 無數字尾綴): 過期/無可見組之清理由 impl 內自行處理
             renderPolygonSetsImpl(vo.map, vo.polygonSets, tracked, {
                 shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
@@ -1419,6 +1420,7 @@ export default {
                 tempKey: 'effGeojsonSetsTemp',
                 setsKey: 'geojsonSets',
                 defVisible: true,
+                clickKey: 'geojsonSetsClick',
                 render: () => vo.renderGeojsonSets(),
                 normalize: (sets) => {
                     let fc = get(vo, 'opt.geojsonSetsClick', null)
@@ -1436,7 +1438,7 @@ export default {
         renderGeojsonSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
-            removeStaleSetLayers(vo.map, tracked, 'geojson-', vo.geojsonSets.length)
+            //聚合渲染(3 source + 4 層, id 無數字尾綴): 過期/無可見組之清理由 impl 內自行處理
             renderGeojsonSetsImpl(vo.map, vo.geojsonSets, tracked, {
                 shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onPopupClick: (lngLat, fd, type, idx) => vo.showFeaturePopup(lngLat, fd, type, idx),
@@ -1462,10 +1464,15 @@ export default {
                 defVisible: false,
                 render: () => vo.renderImageSets(),
                 normalize: (sets) => {
+                    let seenKid = {}
                     return map(sets, (im, k) => {
+                        //穩定識別碼 kid: 使用者給 key 則位移時身分不變(未變更組零觸碰, 不重載圖片); 未給退回索引
+                        let kid = isestr(get(im, 'key', null)) ? `k-${im.key}` : String(k)
+                        if (seenKid[kid]) console.warn(`[WMaplibreglVue] imageSets 有重複 key「${kid}」: 各組將共用同一組圖層 id 互相覆蓋, 請保持 key 於陣列內唯一`)
+                        seenKid[kid] = true
                         if (!isestr(get(im, 'title', null))) im.title = ''; if (!isestr(get(im, 'msg', null))) im.msg = ''
                         if (!isNumber(get(im, 'order', null))) im.order = null; if (!isbol(get(im, 'visible', null))) im.visible = false
-                        return { id: `imageSet-${k}`, ...im }
+                        return { id: `imageSet-${kid}`, ...im, kid }
                     })
                 },
             })
@@ -1473,8 +1480,10 @@ export default {
         renderImageSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
-            removeStaleSetLayers(vo.map, tracked, 'image-', vo.imageSets.length)
-            renderImageSetsImpl(vo.map, vo.imageSets, tracked)
+            //kid 識別 + 逐組差異跳過: 過期/隱藏組之清理由 impl 內處理
+            renderImageSetsImpl(vo.map, vo.imageSets, tracked, {
+                getDisplayOrderByType: () => vo.displayOrderByType,
+            })
             vo.trackedSourceIds = tracked.sourceIds; vo.trackedLayerIds = tracked.layerIds
             vo.scheduleRaiseFeatureLayers()
         },
@@ -1492,6 +1501,7 @@ export default {
                 tempKey: 'effContourSetsTemp',
                 setsKey: 'contourSets',
                 defVisible: false,
+                clickKey: 'contourSetsClick',
                 render: () => vo.renderContourSets(),
                 normalize: (sets) => vo.normalizeContourSets(sets),
             })
@@ -1535,8 +1545,8 @@ export default {
         renderContourSets() {
             let vo = this
             let tracked = { sourceIds: vo.trackedSourceIds, layerIds: vo.trackedLayerIds }
-            removeStaleSetLayers(vo.map, tracked, 'contour-', vo.contourSets.length)
-            renderContourSetsImpl(vo.map, vo.contourSets, tracked, vo.contourSubCounts, {
+            //聚合渲染(單 source + 2 層, id 無數字尾綴): 過期/無可見組之清理由 impl 內自行處理
+            renderContourSetsImpl(vo.map, vo.contourSets, tracked, {
                 shouldDeferClick: (pt, type) => vo.shouldDeferFeatureClick(pt, type),
                 onContourClick: (e, ps, kps, cs, kcs, contourSets) => {
                     let msg = {
@@ -1607,14 +1617,36 @@ export default {
             return changed
         },
 
+        //將顯隱寫回 opt: 目標欄位可能原不存在(使用者未宣告 visible), 直接賦值不具響應性,
+        //父層對 opt.xxxSets[i].visible 的 watcher/template 會收不到通知, 故用 $set(與 syncBaseMapsToOpt 同慣例)
+        setOptVisibleReactive(updatePath, b) {
+            let vo = this
+            let owner = get(vo.opt, updatePath.replace(/\.visible$/, ''), null)
+            if (isobj(owner)) vo.$set(owner, 'visible', b)
+        },
+        //僅重繪指定型別: 顯隱切換不需整批重跑六型別 renderer(重型別如 contour 之 calcContours
+        //不應被無關切換觸發); 與「外部直改 opt.xxxSets[k].visible」路徑僅 render 自身型別的行為一致
+        renderSetsByType(t) {
+            let vo = this
+            let m = {
+                imageSets: () => vo.renderImageSets(),
+                pointSets: () => vo.renderPointSets(),
+                polylineSets: () => vo.renderPolylineSets(),
+                polygonSets: () => vo.renderPolygonSets(),
+                geojsonSets: () => vo.renderGeojsonSets(),
+                contourSets: () => vo.renderContourSets(),
+            }
+            if (isfun(m[t])) m[t]()
+        },
+
         toggleItemVisible(i) {
             let vo = this; let item = vo.items[i]; item.visible = !item.visible
-            set(vo, item.updatePath, item.visible); set(vo.opt, item.updatePath, item.visible)
+            set(vo, item.updatePath, item.visible); vo.setOptVisibleReactive(item.updatePath, item.visible)
             if (!item.visible) {
                 let setKey = item.updatePath.replace('.visible', '')
                 vo.closePopupByOwner(setKey)
             }
-            if (vo.map && vo.mapLoaded) vo.applyAllDataLayers()
+            if (vo.map && vo.mapLoaded) vo.renderSetsByType(item.updatePath.split('.')[0])
         },
 
         // ===== Popup / Tooltip =====
@@ -1672,9 +1704,6 @@ export default {
 
         closePopup() {
             let vo = this
-            each(vo.trackedMarkers, (m) => {
-                let p = m.getPopup(); if (p && p.isOpen()) p.remove()
-            })
             if (vo.featurePopup) {
                 vo.featurePopup.remove(); vo.featurePopup = null
             }
@@ -1684,6 +1713,12 @@ export default {
 
         closePopupByOwner(setKey) {
             let vo = this
+            //pointSets 之 owner 以 kid 記錄(索引因 keyed 重排會位移): 面板路徑傳入的「pointSets.<idx>」先轉譯為 kid 形式
+            if (String(setKey).indexOf('pointSets.') === 0) {
+                let idx = parseInt(String(setKey).slice('pointSets.'.length), 10)
+                let kid = get(vo, ['pointSets', idx, 'kid'], null)
+                if (isestr(kid)) setKey = `pointSets.k:${kid}`
+            }
             if (vo.featurePopup && vo.featurePopupOwner === setKey) {
                 vo.featurePopup.remove(); vo.featurePopup = null; vo.featurePopupOwner = ''
             }
@@ -1701,11 +1736,6 @@ export default {
                 vo.featurePopup.remove(); vo.featurePopup = null
             }
             vo.featurePopupOwner = ''
-            // marker 自帶的 popup 可同時開多個, 僅在 displayPopupOnlyone 時才一併關閉
-            if (!vo.displayPopupOnlyone) return
-            each(vo.trackedMarkers, (m) => {
-                let p = m.getPopup(); if (p && p.isOpen()) p.remove()
-            })
         },
 
         // ===== 公開方法 =====
@@ -1746,7 +1776,8 @@ export default {
                 }
                 let popGap = ptype === 'circle' ? (ptData.radius || get(psData, 'size', 10)) : 5
                 vo.featurePopup = createDirectionalPopup(vo.map, [ll[1], ll[0]], content, vo.popupPosition, popGap, { maxWidth: 'none' })
-                vo.featurePopupOwner = foundPsIndex >= 0 ? `pointSets.${foundPsIndex}` : ''
+                //owner 以組身分(kid)記錄(同 onPointClick): 索引因 keyed 重排會位移
+                vo.featurePopupOwner = foundPsIndex >= 0 ? `pointSets.k:${get(vo, ['pointSets', foundPsIndex, 'kid'], foundPsIndex)}` : ''
             })
             return ll
         },
@@ -1779,15 +1810,17 @@ export default {
         modifyItemsVisible(fun) {
             let vo = this; if (!isfun(fun)) return
             let hiddenKeys = []
+            let changedTypes = {} //僅重繪實際有顯隱變更的型別
             each(vo.items, (v, k) => {
                 let b = fun(v, k)
                 if (!b && v.visible) hiddenKeys.push(v.updatePath.replace('.visible', ''))
-                v.visible = b; set(vo, v.updatePath, b); set(vo.opt, v.updatePath, b)
+                if (v.visible !== b) changedTypes[v.updatePath.split('.')[0]] = true
+                v.visible = b; set(vo, v.updatePath, b); vo.setOptVisibleReactive(v.updatePath, b)
             })
             each(hiddenKeys, (setKey) => {
                 vo.closePopupByOwner(setKey)
             })
-            if (vo.map && vo.mapLoaded) vo.applyAllDataLayers()
+            if (vo.map && vo.mapLoaded) each(Object.keys(changedTypes), (t) => vo.renderSetsByType(t))
         },
     },
 }

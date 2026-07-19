@@ -22,12 +22,18 @@ function buildPosMap(gap, anchorOffset) {
     }
 }
 const flipMap = { 'top': 'bottom', 'bottom': 'top', 'left': 'right', 'right': 'left' }
-//指定方向放置尺寸 elW×elH 的彈窗是否超出容器範圍
-function checkOverflow(dir, proj, cw, ch, elW, elH, gap) {
-    if (dir === 'top') return proj.y - gap - elH < 0
-    if (dir === 'bottom') return proj.y + gap + elH > ch
-    if (dir === 'left') return proj.x - gap - elW < 0
-    if (dir === 'right') return proj.x + gap + elW > cw
+//指定方向放置尺寸 elW×elH 的彈窗是否超出容器範圍。
+//anchorOffset 會實際位移彈窗(如 icon 點預設 popupAnchor 之 -iconHeight), 溢出判斷須一併計入,
+//否則靠緣時判定未溢出不翻轉, 實際 DOM 已被位移出容器而遭裁切; 各方向公式與 buildPosMap 的實際擺放一致
+function checkOverflow(dir, proj, cw, ch, elW, elH, gap, anchorOffset) {
+    let aoX = 0; let aoY = 0
+    if (isarr(anchorOffset) && anchorOffset.length >= 2) {
+        aoX = anchorOffset[0] || 0; aoY = anchorOffset[1] || 0
+    }
+    if (dir === 'top') return proj.y - gap + aoY - elH < 0
+    if (dir === 'bottom') return proj.y + gap + aoY + elH > ch
+    if (dir === 'left') return proj.x - gap + aoX - elW < 0
+    if (dir === 'right') return proj.x + gap + aoX + elW > cw
     return false
 }
 
@@ -54,7 +60,7 @@ export function createDirectionalPopup(map, lngLat, content, position, gap, extr
         let proj = map.project(lngLat)
         let ct = map.getContainer(); let cw = ct.clientWidth; let ch = ct.clientHeight
         let estW = 220; let estH = 160
-        if (checkOverflow(position, proj, cw, ch, estW, estH, gap)) {
+        if (checkOverflow(position, proj, cw, ch, estW, estH, gap, anchorOffset)) {
             chosenPos = flipMap[position] || position
         }
     }
@@ -72,9 +78,9 @@ export function createDirectionalPopup(map, lngLat, content, position, gap, extr
             let realW = rect.width; let realH = rect.height
             let proj = map.project(lngLat)
             let ct = map.getContainer(); let cw = ct.clientWidth; let ch = ct.clientHeight
-            if (checkOverflow(chosenPos, proj, cw, ch, realW, realH, gap)) {
+            if (checkOverflow(chosenPos, proj, cw, ch, realW, realH, gap, anchorOffset)) {
                 let flipped = flipMap[chosenPos] || chosenPos
-                if (!checkOverflow(flipped, proj, cw, ch, realW, realH, gap)) {
+                if (!checkOverflow(flipped, proj, cw, ch, realW, realH, gap, anchorOffset)) {
                     chosenPos = flipped
                     let newPos = posMap[flipped]
                     popup.remove()
@@ -117,7 +123,7 @@ export function recheckSinglePopupDir(map, popup) {
         let elW = rect.width; let elH = rect.height
         let proj = map.project(lngLat)
         let ct = map.getContainer(); let cw = ct.clientWidth; let ch = ct.clientHeight
-        let ovf = (dir) => checkOverflow(dir, proj, cw, ch, elW, elH, gap)
+        let ovf = (dir) => checkOverflow(dir, proj, cw, ch, elW, elH, gap, anchorOffset)
 
         let overflow = ovf(chosenDir)
         let newDir = chosenDir
@@ -155,25 +161,45 @@ export function recheckSinglePopupDir(map, popup) {
  * @returns {Promise}
  */
 const KEY_ICON_FP = '__wmlgvIconFp'
+const KEY_ICON_PENDING = '__wmlgvIconPending'
+const KEY_ICON_LATEST = '__wmlgvIconLatest'
 export function registerIconImage(map, key, src, tw, th) {
     if (!map) return Promise.resolve()
     let fps = map[KEY_ICON_FP]
     if (!fps) {
         fps = {}; map[KEY_ICON_FP] = fps
     }
+    let pend = map[KEY_ICON_PENDING]
+    if (!pend) {
+        pend = {}; map[KEY_ICON_PENDING] = pend
+    }
+    let latest = map[KEY_ICON_LATEST]
+    if (!latest) {
+        latest = {}; map[KEY_ICON_LATEST] = latest
+    }
     //內容指紋 = 長度 + 頭尾片段 + 目標尺寸(避免整串 base64 常駐記憶體):
     //同 key 同內容直接沿用; 內容變更則載入後 removeImage 再 addImage 正確替換(免呼叫端先清光 icon 的 workaround)
     let s = String(src || '')
     let fp = `${s.length}:${s.slice(0, 64)}:${s.slice(-64)}:${tw}x${th}`
+    latest[key] = fp //本次呼叫成為該 key 的最新內容意圖(載入完成時據此棄置較舊之並發載入)
     if (map.hasImage(key) && fps[key] === fp) return Promise.resolve()
-    return new Promise((resolve) => {
+    //同 key 同內容「載入中」共用同一 Promise: 首次渲染多點同用一張圖(如預設 icon)時
+    //免重複建立 Image/解碼/繪 canvas; 鍵含指紋, 同 key 不同內容(更新場景)仍各自載入
+    let pk = `${key}|${fp}`
+    if (pend[pk]) return pend[pk]
+    let pm = new Promise((resolve) => {
         let img = new Image()
         img.crossOrigin = 'anonymous' //跨域圖片須帶 CORS 載入, 否則 canvas 被污染後 getImageData 會 throw
         img.onload = () => {
-            if (!map || (map.hasImage(key) && fps[key] === fp)) { //並發同內容載入: 先完成者已註冊
+            if (!map || latest[key] !== fp) { //已有更新的內容意圖: 本輪(較舊)載入完成較晚, 棄置不得覆寫新圖
                 resolve(); return
             }
+            //所有 map 操作皆入 try: 元件卸載後 map.remove() 會清掉 style, 待載回呼再碰 map 必 throw,
+            //不得成為未捕捉例外(且無論如何須 resolve, 使 pending 表可清)
             try {
+                if (map.hasImage(key) && fps[key] === fp) { //並發同內容載入: 先完成者已註冊
+                    resolve(); return
+                }
                 let c = document.createElement('canvas'); c.width = tw; c.height = th
                 let ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, tw, th)
                 let d = ctx.getImageData(0, 0, tw, th)
@@ -189,4 +215,9 @@ export function registerIconImage(map, key, src, tw, th) {
         img.onerror = () => resolve()
         img.src = src
     })
+    pend[pk] = pm
+    pm.then(() => {
+        delete pend[pk]
+    })
+    return pm
 }

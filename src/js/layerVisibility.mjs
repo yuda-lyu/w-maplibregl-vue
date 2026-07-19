@@ -34,21 +34,6 @@ export function clearTrackedByPrefix(map, prefix, trackedLayerIds, trackedSource
 
 
 /**
- * 清除以指定前綴開頭的 DOM markers
- * @param {String} prefix - 前綴字串（對應 marker._prefix）
- * @param {Array} trackedMarkers - 目前追蹤的 marker 陣列
- * @returns {Array} 更新後的 marker 陣列
- */
-export function clearTrackedMarkersByPrefix(prefix, trackedMarkers) {
-    let remain = []
-    each(trackedMarkers, (m) => {
-        m._prefix === prefix ? m.remove() : remain.push(m)
-    })
-    return remain
-}
-
-
-/**
  * 反註冊委派 listeners 中綁定於符合條件 layer id 者(使註冊與圖層同壽命, 避免累積)。
  * 注意: 依賴 maplibre 私有結構 map._delegatedListeners, 升級 maplibre 時須確認仍相容——
  * 故全 codebase 僅此一份實作, 各清理路徑共用。
@@ -70,42 +55,6 @@ export function offDelegatedListenersByLayer(map, matchLayerId) {
             }
         })
     })
-}
-
-
-/**
- * Remove layers/sources whose set index is no longer present.
- * Renderers use the set index in layer/source ids, so shrinking a set array leaves
- * higher-index ids behind unless they are cleaned before the next render.
- * @param {Object} map - MapLibre map object
- * @param {Object} tracked - { sourceIds, layerIds }
- * @param {String} prefix - layer/source id prefix
- * @param {Number} count - current set count
- */
-export function removeStaleSetLayers(map, tracked, prefix, count) {
-    if (!map) return
-    count = isNumber(count) ? count : 0
-    let idxOf = (id) => {
-        let m = String(id).match(/(\d+)/)
-        return m ? parseInt(m[1], 10) : -1
-    }
-    let isStale = (id) => id.startsWith(prefix) && idxOf(id) >= count
-    let style = map.getStyle ? (map.getStyle() || {}) : {}
-    let staleLayers = filter((style.layers || []).map((l) => l.id), isStale)
-    let staleSources = filter(Object.keys(style.sources || {}), isStale)
-
-    offDelegatedListenersByLayer(map, isStale)
-
-    each(staleLayers, (id) => {
-        if (map.getLayer(id)) map.removeLayer(id)
-    })
-    each(staleSources, (id) => {
-        if (map.getSource(id)) map.removeSource(id)
-    })
-    if (tracked) {
-        tracked.layerIds = filter(tracked.layerIds || [], (id) => !isStale(id))
-        tracked.sourceIds = filter(tracked.sourceIds || [], (id) => !isStale(id))
-    }
 }
 
 
