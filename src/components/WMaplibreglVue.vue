@@ -599,6 +599,7 @@ const defPanelsOrder = ['panelBaseMaps', 'panelLabels', 'panelScale', 'panelComp
  * @vue-prop {Number} [opt.imageSets[i].order=null] 輸入第i個影像集合的排序用數字，預設null
  * @vue-prop {Boolean} [opt.imageSets[i].visible=false] 輸入是否顯示第i個影像集合布林值，預設false
  * @vue-prop {Object} [opt.imageSets[i].image={}] 輸入第i個影像集合的影像來源物件，含url(影像連結字串)與lngMin/lngMax/latMin/latMax(四至經緯度數字)，預設{}
+ * @vue-prop {Number} [opt.imageSets[i].opacity=1] 輸入第i個影像集合的透明度數字，範圍0~1，超出範圍將夾限，預設1
  */
 export default {
     directives: {
@@ -1472,7 +1473,8 @@ export default {
                         seenKid[kid] = true
                         if (!isestr(get(im, 'title', null))) im.title = ''; if (!isestr(get(im, 'msg', null))) im.msg = ''
                         if (!isNumber(get(im, 'order', null))) im.order = null; if (!isbol(get(im, 'visible', null))) im.visible = false
-                        return { id: `imageSet-${kid}`, ...im, kid }
+                        let op = get(im, 'opacity', null); if (!isNumber(op)) op = 1; if (op < 0) op = 0; if (op > 1) op = 1 //夾限至 0~1, 免無效值直入 paint
+                        return { id: `imageSet-${kid}`, ...im, kid, opacity: op }
                     })
                 },
             })
