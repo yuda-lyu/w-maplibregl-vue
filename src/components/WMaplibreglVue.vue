@@ -580,7 +580,7 @@ function freezeCoordField(v) {
  * @vue-prop {String} [opt.polygonSets[i].lineColor='rgba(0,150,255,1)'] 輸入第i個多邊形集合的框線顏色字串，預設'rgba(0,150,255,1)'
  * @vue-prop {Number} [opt.polygonSets[i].lineWidth=3] 輸入第i個多邊形集合的框線寬度數字，預設3
  * @vue-prop {String} [opt.polygonSets[i].fillColor='rgba(0,150,255,0.25)'] 輸入第i個多邊形集合的填充顏色字串，預設'rgba(0,150,255,0.25)'
- * @vue-prop {Array} [opt.polygonSets[i].latLngs=[]] 輸入第i個多邊形集合的數據陣列(環陣列，XOR套疊環可表示挖洞)，各點座標為緯經度，預設[]
+ * @vue-prop {Array} [opt.polygonSets[i].latLngs=[]] 輸入第i個多邊形集合的數據陣列，各點座標為緯經度，預設[]。可為單一環([[lat,lng],...])、環陣列([[[lat,lng],...],...]，代表1個polygon，環間為XOR套疊可表示挖洞)、或polygon陣列([[[[lat,lng],...],...],...]，代表1個multiPolygon，各polygon之環各自XOR後合併)
  * @vue-prop {Function} [opt.polygonSetsClick=function(){}] 輸入全域多邊形集合的click呼叫函數，引數為{ ev, polygonSet, kpolygonSet, polygonSets }，預設function(){}
  * @vue-prop {Array} [opt.geojsonSets=[]] 輸入geojson集合陣列，各元素為物件，預設[]
  * @vue-prop {String} [opt.geojsonSets[i].title=''] 輸入第i個geojson集合的標題字串，預設''

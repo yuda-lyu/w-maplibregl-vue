@@ -241,7 +241,10 @@ function ringsHaveCrossing(rings) {
         let s = ord[k]
         let sx0 = x0[s]; let sy0 = y0[s]; let sy1 = y1[s]
         let w = 0
-        for (let t = 0; t < na; t++) { let o = act[t]; if (x1[o] >= sx0) act[w++] = o } //汰除已掃過之段
+        for (let t = 0; t < na; t++) { //汰除已掃過之段
+            let o = act[t]
+            if (x1[o] >= sx0) act[w++] = o
+        }
         na = w
         let sax = ax[s]; let say = ay[s]; let sbx = bx[s]; let sby = by[s]
         for (let t = 0; t < na; t++) {
@@ -281,28 +284,23 @@ function ringBBox(ring) {
 
 
 /**
- * buildPolygonGeometry 之快速路徑：單趟迴圈完成「閉環 + 座標反轉」，
- * 僅在該組環結構之 XOR 語意與 GeoJSON「首環為外環、其餘為洞」語意等價時才成立，
- * 不等價（或結構非預期）一律回傳 null 交回慢管線（polybool）處理。
+ * 將「單一 XOR 群」（一組環）轉為 GeoJSON polygon 陣列
+ * 僅在該組環之 XOR 語意與 GeoJSON 環語意等價時才成立，不等價回傳 null。
  *
  * 等價條件（全數滿足）:
- *   1. 結構為 [ringString] 或 [ring][pt[lat,lng]]，各環 >= 3 點且座標為有限數值
+ *   1. 各環為 >= 3 點之點陣列且座標為有限數值
  *   2. 環內無自相交、環間無相交或接觸（8 字型環、部分重疊環、重複頂點之自我接觸環，
  *      polybool 會切分/做對稱差，快速路徑不會）
- *   3. 多環時：第 2 環起之 bbox 須互不重疊（避免島中島三層套疊被誤當成洞）
- *      且各自完全落在首環內（不相交之分離環，polybool 會拆成多個 polygon）
- * @param {Array} lls - 原始 latLngs（座標為 [lat, lng]）
- * @returns {Object|null} MultiPolygon geometry 或 null
+ *   3. 多環時，二者擇一:
+ *      a. 全離散: 各環 bbox 兩兩不重疊 → 互不重疊環之 XOR 對稱差＝聯集，各環為獨立 polygon
+ *         （行政區飛地/離島常態；bbox 互斥本身即排除包含與相交）
+ *      b. 首環 + 互不重疊之洞: 第 2 環起之 bbox 互不重疊（避免島中島三層套疊被誤當成洞）
+ *         且各自完全落在首環內
+ *      混合情形（部分洞/部分離散）回退慢管線
+ * @param {Array} src - 環陣列 [ring][pt[lat, lng]]
+ * @returns {Array|null} polygon 陣列（各元素為環陣列，座標已轉為 [lng, lat]）或 null
  */
-function tryBuildPolygonGeometryFast(lls) {
-
-    //結構判別: 深度 2 視為單一 ringString, 深度 3 視為環陣列, 其餘回退
-    if (!isearr(lls)) return null
-    let src
-    let h = lls[0]
-    if (isearr(h) && isNumber(h[0])) src = [lls]
-    else if (isearr(h) && isearr(h[0]) && isNumber(h[0][0])) src = lls
-    else return null
+function fastRingGroupToPolygons(src) {
 
     //閉環 + 座標反轉([lat,lng] -> [lng,lat]), 同時檢查座標數值合法
     let rings = []
@@ -323,22 +321,73 @@ function tryBuildPolygonGeometryFast(lls) {
 
     if (ringsHaveCrossing(rings)) return null
 
-    //多環: 須為「首環 + 互不重疊之洞」
-    if (rings.length > 1) {
-        let bbs = rings.map(ringBBox)
-        let b0 = bbs[0]
-        for (let i = 1; i < rings.length; i++) {
-            let bi = bbs[i]
-            if (bi[0] < b0[0] || bi[1] < b0[1] || bi[2] > b0[2] || bi[3] > b0[3]) return null
-            if (!pointInRing(rings[i][0], rings[0])) return null
-            for (let j = i + 1; j < rings.length; j++) {
-                let bj = bbs[j]
-                if (bi[0] <= bj[2] && bj[0] <= bi[2] && bi[1] <= bj[3] && bj[1] <= bi[3]) return null //bbox 重疊
+    if (rings.length === 1) return [rings]
+
+    //多環: 「全離散」或「首環 + 互不重疊之洞」
+    let bbs = rings.map(ringBBox)
+
+    //全離散: 各環(含首環) bbox 兩兩不重疊 → 每環自成一個 polygon
+    let allDisjoint = true
+    for (let i = 0; i < rings.length && allDisjoint; i++) {
+        let bi = bbs[i]
+        for (let j = i + 1; j < rings.length; j++) {
+            let bj = bbs[j]
+            if (bi[0] <= bj[2] && bj[0] <= bi[2] && bi[1] <= bj[3] && bj[1] <= bi[3]) {
+                allDisjoint = false
+                break
             }
         }
     }
+    if (allDisjoint) return rings.map((r) => [r])
 
-    return { type: 'MultiPolygon', coordinates: [rings] }
+    //首環 + 互不重疊之洞
+    let b0 = bbs[0]
+    for (let i = 1; i < rings.length; i++) {
+        let bi = bbs[i]
+        if (bi[0] < b0[0] || bi[1] < b0[1] || bi[2] > b0[2] || bi[3] > b0[3]) return null
+        if (!pointInRing(rings[i][0], rings[0])) return null
+        for (let j = i + 1; j < rings.length; j++) {
+            let bj = bbs[j]
+            if (bi[0] <= bj[2] && bj[0] <= bi[2] && bi[1] <= bj[3] && bj[1] <= bi[3]) return null //bbox 重疊
+        }
+    }
+    return [rings]
+}
+
+
+/**
+ * buildPolygonGeometry 之快速路徑：單趟迴圈完成「閉環 + 座標反轉」，
+ * 結構非預期或 XOR 語意不等價一律回傳 null 交回慢管線（polybool）處理。
+ *
+ * 支援之輸入深度（與慢管線 toMultiPolygon 之判讀一致）:
+ *   2 - [pt[lat,lng]]          單一 ringString
+ *   3 - [ring][pt]             一個 polygon 之環陣列（XOR 套疊）
+ *   4 - [polygon][ring][pt]    multiPolygon；各 polygon 之環各自 XOR 後串接，
+ *                              故逐 polygon 獨立判定等價性（跨 polygon 之環互不影響）
+ * @param {Array} lls - 原始 latLngs（座標為 [lat, lng]）
+ * @returns {Object|null} MultiPolygon geometry 或 null
+ */
+function tryBuildPolygonGeometryFast(lls) {
+
+    if (!isearr(lls)) return null
+    let h = lls[0]
+    let groups
+    if (isearr(h) && isNumber(h[0])) groups = [[lls]]
+    else if (isearr(h) && isearr(h[0]) && isNumber(h[0][0])) groups = [lls]
+    else if (isearr(h) && isearr(h[0]) && isearr(h[0][0]) && isNumber(h[0][0][0])) groups = lls
+    else return null
+
+    let coordinates = []
+    for (let g = 0; g < groups.length; g++) {
+        let grp = groups[g]
+        if (!isearr(grp)) return null
+        let pgs = fastRingGroupToPolygons(grp)
+        if (!pgs) return null
+        for (let i = 0; i < pgs.length; i++) coordinates.push(pgs[i])
+    }
+    if (coordinates.length === 0) return null
+
+    return { type: 'MultiPolygon', coordinates }
 }
 
 
