@@ -416,6 +416,30 @@ const defPanelsOrder = ['panelBaseMaps', 'panelLabels', 'panelScale', 'panelComp
 
 
 /**
+ * 深度凍結「大量座標」欄位（points / latLngs），使 Vue 2 observe 直接跳過該子樹
+ * Vue 2 之 observe() 對 !Object.isExtensible 者不遞迴、不掛 getter/setter，
+ * 萬點級資料存入 reactive data 之深走訪成本(數百 ms)因此免除。
+ *
+ * 僅可用於「套件內外皆唯讀」之座標欄位:
+ *   - 組物件本身不可凍結: syncSetsVisible / toggleItemVisible / modifyItemsVisible 會回寫 visible
+ *   - contourSets 不可凍結: renderContourSets 會回寫 cs.legend
+ * 座標欄位來源為 processSetsChange 內 cloneDeep 之私有副本, 凍結不影響呼叫端原資料。
+ */
+function freezeCoordField(v) {
+    if (isarr(v)) {
+        for (let i = 0; i < v.length; i++) freezeCoordField(v[i])
+        return Object.freeze(v)
+    }
+    if (isobj(v)) {
+        let ks = Object.keys(v)
+        for (let i = 0; i < ks.length; i++) freezeCoordField(v[ks[i]])
+        return Object.freeze(v)
+    }
+    return v //數值/字串/函數等原生值不處理
+}
+
+
+/**
  * WMaplibreglVue2 - 使用 MapLibre GL JS 重構的地圖組件（Vue 2）
  * 所有面板透過四角容器 (corner container) 自動堆疊，不重疊。
  *
@@ -1239,6 +1263,7 @@ export default {
                             if (!isestr(get(pt, 'title', null))) pt.title = ''; if (!isestr(get(pt, 'msg', null))) pt.msg = ''
                             return { id: `pointSet-${kid}-point-${kpt}`, ...pt, radius: get(pt, 'size', null) || sz, fillColor: get(pt, 'fillColor', null) || fl, lineColor: get(pt, 'lineColor', null) || lc, lineWidth: get(pt, 'lineWidth', null) || lw, funSetsClick: fc }
                         })
+                        freezeCoordField(ps.points) //萬點級: 免 Vue 深度 observe(渲染/事件反查/popup 皆唯讀取用)
                         return { id: `pointSet-${kid}`, ...ps, kid, funSetsClick: fc }
                     })
                     //kid 查找表(刻意不進 reactive data): 事件 handler 以 _kid 取「最新」資料。
@@ -1347,6 +1372,7 @@ export default {
                         if (!isNumber(get(pls, 'order', null))) pls.order = null; if (!isbol(get(pls, 'visible', null))) pls.visible = true
                         let lc = get(pls, 'lineColor', null); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
                         let lw = get(pls, 'lineWidth', null); if (!isNumber(lw)) lw = 3
+                        freezeCoordField(pls.latLngs) //大量座標: 免 Vue 深度 observe(渲染端唯讀取用)
                         return { id: `polylineSet-${k}`, ...pls, lineColor: lc, lineWidth: lw, funSetsClick: fc }
                     })
                 },
@@ -1389,6 +1415,8 @@ export default {
                         let lc = get(pg, 'lineColor', 'rgba(0,150,255,1)'); if (!isestr(lc)) lc = 'rgba(0,150,255,1)'
                         let lw = get(pg, 'lineWidth', 3); if (!isNumber(lw)) lw = 3
                         let fl = get(pg, 'fillColor', 'rgba(0,150,255,0.25)'); if (!isestr(fl)) fl = 'rgba(0,150,255,0.25)'
+                        //註: polygonSets.latLngs 刻意不凍結——buildPolygonGeometry 回退之 w-gis 慢管線
+                        //(fixCloseMultiPolygon)會就地 push 閉合點, 凍結會在該路徑丟 TypeError
                         return { id: `polygonSet-${k}`, ...pg, lineColor: lc, lineWidth: lw, fillColor: fl, funSetsClick: fc }
                     })
                 },
