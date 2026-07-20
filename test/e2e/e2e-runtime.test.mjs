@@ -17,7 +17,7 @@
 //     #btnResetBasemaps(E2E-003, E2E-007), panelItems 之 polygon R checkbox(E2E-002),
 //     #btnClearImageUrl(E2E-008), #btnIconSlow/#btnIconFast(E2E-009, E2E-014),
 //     #btnShiftPoints 與 point A checkbox(E2E-010), 地圖 canvas 點擊圖徵(E2E-010, E2E-011),
-//     #btnTerrainTune(E2E-012), #btnReorderBasemaps(E2E-013)。
+//     #btnTerrainTune(E2E-012), #btnReorderBasemaps(E2E-013), #btnVFlipImages(E2E-015)。
 //   uncovered(非本 spec 標的): panelBaseMaps 之 radio/checkbox/滑桿(底圖面板互動屬 AppPBM* 範例生態),
 //     縮放按鈕與 canvas 拖曳(hover/displayorder 測試已涵蓋地圖互動)。
 //
@@ -48,6 +48,10 @@
 //   - E2E-012 runtime 重套 terrain(調整地形參數): hillshade 應插回「全部資料圖層之下」(依實際疊序, 非追蹤陣列插入序)
 //   - E2E-013 底圖增量重排(非結構性): hillshade 應維持在全部底圖/疊加層之上(疊加層不得被移到 hillshade 上方)
 //   - E2E-014 icon 載入中卸載元件(切換子選單): 待載完成之回呼不得對已銷毀地圖操作(無未捕捉 TypeError)
+//   - E2E-015 影像四至不依欄位命名定南北: 點 #btnVFlipImages 換為上綠下藍雙色影像兩張, 左張以合規慣例
+//               (latMin 南 < latMax 北)、右張以像素慣例(latMin 北 > latMax 南)宣告 → 兩張皆須綠在北、
+//               藍在南(北側取樣兩張相同、南側取樣兩張相同, 且北南不同色); style 之 image source
+//               coordinates 首角(左上)緯度須大於末角(左下)(補強)
 import assert from 'assert'
 import { chromium } from 'playwright'
 import { baseUrl, startServer, waitUntilExist } from './e2e-setup.mjs'
@@ -406,5 +410,48 @@ describe('e2e-runtime', function() {
         await page.waitForTimeout(4500) //等 slow 載入完成後之回呼執行
         //spec: 元件卸載後, 待載完成之 icon 回呼不得對已銷毀地圖操作而拋未捕捉例外
         assert.strictEqual(typeErrors.length, 0, `卸載後不得有未捕捉 TypeError, 實際: ${typeErrors.join(' | ')}`)
+    })
+
+    it('E2E-015 影像四至不依欄位命名定南北: 兩種慣例皆綠在北藍在南, 不上下顛倒', async function() {
+        await gotoExample()
+        await page.locator('#btnVFlipImages').click()
+
+        //兩張 1x2 雙色影像(頂列綠/底列藍)之四至皆為 lat -0.02~0.02, 影像列中心落在 lat ±0.01;
+        //取樣點取 lat ±0.015(在列中心之外側 → 線性取樣後為純色), 各自落在該張影像 lng 範圍中央
+        const LNG_OK = 121.04 //左張: 合規慣例 latMin(-0.02)<latMax(0.02)
+        const LNG_PIX = 121.09 //右張: 像素慣例 latMin(0.02)>latMax(-0.02)
+        let clipNorthOk = clipAt(0.015, LNG_OK, 10, 10)
+        let clipSouthOk = clipAt(-0.015, LNG_OK, 10, 10)
+        let clipNorthPix = clipAt(0.015, LNG_PIX, 10, 10)
+        let clipSouthPix = clipAt(-0.015, LNG_PIX, 10, 10)
+
+        //等右張影像就位(換圖前該處為舊的綠色純色影像 img green, lng 121.02~121.08 不覆蓋 121.09,
+        //故換圖後該區由底圖紅轉為影像色 → 以區域變化收斂等待)
+        let northPixBefore = await captureRegionStable(clipNorthPix)
+        await waitRegionChanged(clipNorthPix, northPixBefore)
+
+        let northOk = await captureRegionStable(clipNorthOk)
+        let southOk = await captureRegionStable(clipSouthOk)
+        let northPix = await captureRegionStable(clipNorthPix)
+        let southPix = await captureRegionStable(clipSouthPix)
+
+        //spec 前提: 影像上下不同色(否則本 case 無鑑別力, 翻轉也看不出來)
+        assert.ok(!northOk.equals(southOk), '雙色影像之北側與南側取樣應為不同色(前提不成立則本 case 無鑑別力)')
+
+        //spec: 像素慣例(latMin 填北緯)之影像不得上下顛倒 → 與合規慣例影像同向
+        assert.ok(northPix.equals(northOk), '像素慣例影像之北側應與合規慣例影像北側同色(綠); 不同色即代表該張影像上下顛倒')
+        assert.ok(southPix.equals(southOk), '像素慣例影像之南側應與合規慣例影像南側同色(藍); 不同色即代表該張影像上下顛倒')
+
+        //補強(spec: maplibre image source coordinates 為 [左上,右上,右下,左下], 左上即北):
+        //兩張之首角緯度皆須大於末角緯度
+        let coords = await page.evaluate(() => {
+            let st = window.__getMapStyle ? window.__getMapStyle() : null
+            if (!st || !st.sources) return null
+            let pick = (id) => (st.sources[id] ? st.sources[id].coordinates : null)
+            return { ok: pick('image-src-k-imgOK'), pix: pick('image-src-k-imgPix') }
+        })
+        assert.ok(coords && coords.ok && coords.pix, '兩張影像之 image source coordinates 皆應存在')
+        assert.ok(coords.ok[0][1] > coords.ok[3][1], `合規慣例影像左上角緯度應大於左下角(實際 ${coords.ok[0][1]} vs ${coords.ok[3][1]})`)
+        assert.ok(coords.pix[0][1] > coords.pix[3][1], `像素慣例影像左上角緯度應大於左下角(實際 ${coords.pix[0][1]} vs ${coords.pix[3][1]})`)
     })
 })

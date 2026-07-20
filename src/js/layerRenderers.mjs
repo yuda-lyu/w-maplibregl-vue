@@ -1190,9 +1190,15 @@ export function renderImageSets(map, imageSets, tracked, callbacks) {
         if (!isestr(url)) {
             removeImageSetByKid(map, kid, tracked, store); return
         }
-        let lnMin = cdbl(get(img, 'lngMin', 0)); let lnMax = cdbl(get(img, 'lngMax', 0))
-        let ltMin = cdbl(get(img, 'latMin', 0)); let ltMax = cdbl(get(img, 'latMax', 0))
-        let coordinates = [[lnMin, ltMax], [lnMax, ltMax], [lnMax, ltMin], [lnMin, ltMin]]
+        //四至以實際數值定 west/east/north/south, 不信任 lngMin/lngMax/latMin/latMax 之欄位命名方向:
+        //呼叫端可能以「像素列慣例」填 latMin=頂列緯度(北, 較大值), 直接取 latMax 當頂邊會使影像上下顛倒。
+        //maplibre image source 之 coordinates 須為 [左上, 右上, 右下, 左下](北在上), 故 north 取較大緯度。
+        //對 latMin<latMax 之合規呼叫端結果不變。
+        let _lnA = cdbl(get(img, 'lngMin', 0)); let _lnB = cdbl(get(img, 'lngMax', 0))
+        let _ltA = cdbl(get(img, 'latMin', 0)); let _ltB = cdbl(get(img, 'latMax', 0))
+        let lnW = _lnA < _lnB ? _lnA : _lnB; let lnE = _lnA > _lnB ? _lnA : _lnB
+        let ltS = _ltA < _ltB ? _ltA : _ltB; let ltN = _ltA > _ltB ? _ltA : _ltB
+        let coordinates = [[lnW, ltN], [lnE, ltN], [lnE, ltS], [lnW, ltS]]
         let op = get(im, 'opacity', null); if (!isNumber(op)) op = 1
         let sameImage = store.imageSetsPrev[kid] && isEqual(get(store.imageSetsPrev[kid], 'image', null), img) //須於覆寫 prev 前取值
         store.imageSetsPrev[kid] = im //實際套用才記錄(aliasing 契約同 pointSetsPrev: 整批替換 + visible 走獨立路徑)

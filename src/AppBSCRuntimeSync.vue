@@ -17,6 +17,7 @@
             <button id="btnIconFast" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="setIconFast">runtime 變更: 換 icon 為 fast 圖</button>
             <button id="btnTerrainTune" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="tuneTerrain">runtime 變更: 調整地形參數(重套 terrain)</button>
             <button id="btnReorderBasemaps" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="reorderBasemaps">runtime 變更: 反轉底圖順序(增量路徑)</button>
+            <button id="btnVFlipImages" style="cursor:pointer; padding:4px 10px; margin-left:8px;" @click="setVFlipImages">runtime 變更: 換為上綠下藍雙色影像(左合規慣例/右像素慣例)</button>
         </div>
 
         <div style="position:relative;">
@@ -45,6 +46,9 @@ const TILE_RED = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 const TILE_TRANSPARENT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=' //[0,0,0,0]
 const IMG_GREEN = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPQ2GfzHwAEVgIiUE5/VAAAAABJRU5ErkJggg==' //[40,190,60]
 const IMG_BLUE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPQcHv2HwAEQgJU1FeLxgAAAABJRU5ErkJggg==' //[40,70,230]
+//1x2 雙色 PNG(程式化產生並經解碼回驗): 頂列綠[40,190,60] 底列藍[40,70,230]。
+//上下不對稱才驗得出影像有無 Y 軸翻轉(純色圖翻轉後看不出差別)
+const IMG_GREEN_TOP_BLUE_BOTTOM = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAIAAAAW4yFwAAAAEElEQVR4nGPQ2GfDoOH2DAAIqgJ3NmETdAAAAABJRU5ErkJggg=='
 //vector 底圖之 TileJSON 走 data: URI(本體可成功載入不阻塞 map load);
 //bounds 指向視野外極小區域 → 視圖內零圖磚請求(避免圖磚請求失敗之逐層 fallback 使 source 長期 loading, 阻塞 map idle)
 const VEC_TILEJSON = 'data:application/json,' + encodeURIComponent(JSON.stringify({ tilejson: '2.2.0', tiles: ['http://127.0.0.1:8123/nope/{z}/{x}/{y}.pbf'], minzoom: 0, maxzoom: 14, bounds: [-10, -10, -9.99, -9.99] }))
@@ -157,6 +161,16 @@ export default {
         //反轉底圖清單順序(同 key 集合之非結構性變更, 走增量路徑): 供驗證 hillshade 與疊加層之疊序
         reorderBasemaps: function() {
             this.opt.panelBaseMaps.baseMaps.reverse()
+        },
+        //換為上綠下藍雙色影像, 兩張分別以兩種四至慣例宣告(左右並排不重疊):
+        //  imgOK  合規慣例 latMin(-0.02, 南) < latMax(0.02, 北)
+        //  imgPix 像素慣例 latMin(0.02, 北) > latMax(-0.02, 南) — 呼叫端以像素列填, latMin 存頂列緯度
+        //兩張都應綠在北、藍在南(四至依實際數值定南北, 不依欄位命名方向)
+        setVFlipImages: function() {
+            this.opt.imageSets = [
+                { title: 'img ok', key: 'imgOK', image: { url: IMG_GREEN_TOP_BLUE_BOTTOM, lngMin: 121.02, lngMax: 121.06, latMin: -0.02, latMax: 0.02 }, visible: true },
+                { title: 'img pixel', key: 'imgPix', image: { url: IMG_GREEN_TOP_BLUE_BOTTOM, lngMin: 121.07, lngMax: 121.11, latMin: 0.02, latMax: -0.02 }, visible: true },
+            ]
         },
     },
 }

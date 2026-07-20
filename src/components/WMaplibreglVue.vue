@@ -622,7 +622,7 @@ function freezeCoordField(v) {
  * @vue-prop {String} [opt.imageSets[i].key=null] 輸入第i個影像集合的穩定識別鍵字串，需於陣列內唯一；提供後陣列插入或重排時該組身分不變(未變更組不重載影像)，未給則以陣列索引識別，預設null
  * @vue-prop {Number} [opt.imageSets[i].order=null] 輸入第i個影像集合的排序用數字，預設null
  * @vue-prop {Boolean} [opt.imageSets[i].visible=false] 輸入是否顯示第i個影像集合布林值，預設false
- * @vue-prop {Object} [opt.imageSets[i].image={}] 輸入第i個影像集合的影像來源物件，含url(影像連結字串)與lngMin/lngMax/latMin/latMax(四至經緯度數字)，預設{}
+ * @vue-prop {Object} [opt.imageSets[i].image={}] 輸入第i個影像集合的影像來源物件，含url(影像連結字串)與lngMin/lngMax/latMin/latMax(四至經緯度數字)，預設{}。四至以實際數值判定東西南北(較大緯度即為北邊)，不依欄位命名方向，故latMin填北緯之像素列慣例亦可正確貼合不致上下顛倒
  * @vue-prop {Number} [opt.imageSets[i].opacity=1] 輸入第i個影像集合的透明度數字，範圍0~1，超出範圍將夾限，預設1
  */
 export default {
