@@ -27,8 +27,41 @@ let defBaseMaps = [
     },
 
     {
-        name: 'EsriWorldImagery',
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        name: 'OpenFreeMap(明亮)',
+        type: 'style',
+        url: 'https://tiles.openfreemap.org/styles/bright',
+        colorShade: 'light',
+        opacity: 1,
+        visible: false,
+    },
+    {
+        name: 'OpenFreeMap(自由)',
+        type: 'style',
+        url: 'https://tiles.openfreemap.org/styles/liberty',
+        colorShade: 'light',
+        opacity: 1,
+        visible: false,
+    },
+    {
+        name: 'OpenFreeMap(淺灰)',
+        type: 'style',
+        url: 'https://tiles.openfreemap.org/styles/positron',
+        colorShade: 'light',
+        opacity: 1,
+        visible: false,
+    },
+    {
+        name: 'OpenFreeMap(峽灣)',
+        type: 'style',
+        url: 'https://tiles.openfreemap.org/styles/fiord',
+        colorShade: 'dark',
+        opacity: 1,
+        visible: false,
+    },
+    {
+        name: 'OpenFreeMap(深色)',
+        type: 'style',
+        url: 'https://tiles.openfreemap.org/styles/dark',
         colorShade: 'dark',
         opacity: 1,
         visible: false,
@@ -52,6 +85,14 @@ let defBaseMaps = [
     // {
     //     name: 'GoogleHybrid',
     //     url: '//www.google.cn/maps/vt?lyrs=s,h@189&gl=cn&x={x}&y={y}&z={z}',
+    //     colorShade: 'dark',
+    //     opacity: 1,
+    //     visible: false,
+    // },
+    
+    // {
+    //     name: 'EsriWorldImagery',
+    //     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,

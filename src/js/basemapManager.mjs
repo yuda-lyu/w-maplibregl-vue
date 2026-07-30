@@ -5,6 +5,7 @@
 import each from 'lodash-es/each.js'
 import get from 'lodash-es/get.js'
 import omit from 'lodash-es/omit.js'
+import cloneDeep from 'lodash-es/cloneDeep.js'
 import isEqual from 'lodash-es/isEqual.js'
 import isobj from 'wsemi/src/isobj.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
@@ -39,8 +40,54 @@ function baseMapKeys(baseMaps) {
 }
 
 
+// style 型別底圖的 style JSON 快取: key = style url。applyBaseMaps 為同步流程,
+// 故 fetch 由 preloadBaseMapStyles 預先完成, addBaseMapLayer 只讀快取
+let kpStyleCache = {}
+
+
 /**
- * 將底圖配置套用到 map（建立 raster/vector/wms source 與 layer）
+ * 預先抓取 style 型別底圖的 style JSON 並快取（applyBaseMaps 為同步流程, 只讀快取）
+ * @param {Array} baseMaps - 底圖配置陣列
+ * @returns {Promise<Number>} 本次新載入成功的 style 數量, 0 代表全部已快取或無 style 型別（呼叫端無須補套, 避免無謂重建）
+ */
+export async function preloadBaseMapStyles(baseMaps) {
+    let bms = (isarr(baseMaps) ? baseMaps : []).filter((bm) => isobj(bm) && bm.type === 'style' && isestr(bm.url))
+    let n = 0
+    await Promise.all(bms.map(async (bm) => {
+        let u = bm.url
+        if (kpStyleCache[u]) return
+        try {
+            let r = await fetch(u)
+            if (!r.ok) throw new Error(`HTTP ${r.status}`)
+            kpStyleCache[u] = await r.json()
+            n++
+        }
+        catch (e) {
+            console.error('[basemapManager] preloadBaseMapStyles fetch error:', u, e)
+            kpStyleCache[u] = null //失敗記 null 跳過該底圖不阻斷其他圖層; null 為 falsy, 下次呼叫會重試
+        }
+    }))
+    return n
+}
+
+
+// 取得某 baseMap 條目實際對應的所有 layer id: style 型別展開為一組 layer(id 帶 `-<序號>-<原id>` 尾碼),
+// 其餘型別為單一 layer。key 經 baseMapKey 淨化後不含 '-', 故 `${id}-` 前綴過濾不會誤命中其他條目
+function baseMapLayerIds(map, baseMaps, idx) {
+    if (!map) return []
+    let id = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
+    let bm = get(baseMaps, idx, null)
+    if (isobj(bm) && bm.type === 'style') {
+        let style = map.getStyle ? (map.getStyle() || {}) : {}
+        return (style.layers || []).map((l) => get(l, 'id', '')).filter((v) => isestr(v) && v.indexOf(`${id}-`) === 0)
+    }
+    return map.getLayer(id) ? [id] : []
+}
+
+
+/**
+ * 將底圖配置套用到 map（建立 raster/vector/wms/style source 與 layer）
+ * style 型別讀取 preloadBaseMapStyles 之快取, 未命中即跳過該條目（由呼叫端於預載完成後補套）
  * @param {Object} map - MapLibre 地圖實例
  * @param {Array} baseMaps - 底圖配置陣列
  */
@@ -60,6 +107,31 @@ export function applyBaseMaps(map, baseMaps) {
         let srcId = `basemap-src-${keys[k]}`; let layerId = `basemap-layer-${keys[k]}`
         if (map.getLayer(layerId)) map.removeLayer(layerId)
         if (map.getSource(srcId)) map.removeSource(srcId)
+        if (bm.type === 'style') {
+            //完整 MapLibre style JSON 底圖: 整組 sources/layers 注入現有 map(不可用 setStyle, 會清除資料圖層與地形)
+            let st = kpStyleCache[bm.url]
+            if (!isobj(st)) return //尚未載入或載入失敗 → 跳過, 待呼叫端於 preloadBaseMapStyles resolve 後補套
+            //glyphs/sprite 為整份 style 的全域單例: 與現值不同才設定, 避免每次重套都重載字型/sprite;
+            //sprite 僅支援字串形式(常見), 陣列形式不處理
+            if (isestr(st.glyphs) && map.getGlyphs() !== st.glyphs) map.setGlyphs(st.glyphs)
+            if (isestr(st.sprite)) {
+                let cur = get((map.getSprite() || []).find((sp) => get(sp, 'id') === 'default'), 'url', null)
+                if (cur !== st.sprite) map.setSprite(st.sprite)
+            }
+            let vis = bm.visible ? 'visible' : 'none'
+            each(Object.keys(st.sources || {}), (sn) => {
+                let sid = `${srcId}-${sn}`
+                if (!map.getSource(sid)) map.addSource(sid, st.sources[sn])
+            })
+            each((st.layers || []), (l, i) => {
+                let spec = cloneDeep(l)
+                spec.id = `${layerId}-${i}-${l.id}` //共用條目前綴: 供 baseMapLayerIds 聚合與 applyBaseMaps 前綴清除回收
+                if (spec.source) spec.source = `${srcId}-${spec.source}`
+                spec.layout = { ...(spec.layout || {}), visibility: vis }
+                map.addLayer(spec)
+            })
+            return
+        }
         if (bm.type === 'vector') {
             let u = bm.url; if (u.startsWith('//')) u = 'https:' + u
             map.addSource(srcId, { type: 'vector', url: u })
@@ -206,12 +278,12 @@ export function applyTerrain(map, terrainMap, trackedLayerIds) {
  * @param {Number} idx - 選中的底圖索引
  */
 export function switchBaseMap(map, baseMaps, idx) {
-    let keys = baseMapKeys(baseMaps)
     each(baseMaps, (bm, k) => {
         if (!isestr(bm.colorShade)) return
         bm.visible = (k === idx)
-        let id = `basemap-layer-${keys[k]}`
-        if (map && map.getLayer(id)) map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+        each(baseMapLayerIds(map, baseMaps, k), (id) => {
+            map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+        })
     })
 }
 
@@ -225,8 +297,9 @@ export function switchBaseMap(map, baseMaps, idx) {
 export function toggleOverlayVisible(map, baseMaps, idx) {
     let bm = get(baseMaps, idx, null); if (!bm) return
     bm.visible = !bm.visible
-    let id = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
-    if (map && map.getLayer(id)) map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+    each(baseMapLayerIds(map, baseMaps, idx), (id) => {
+        map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+    })
 }
 
 
@@ -239,6 +312,7 @@ export function toggleOverlayVisible(map, baseMaps, idx) {
  */
 export function setOverlayOpacity(map, baseMaps, idx, val) {
     let bm = get(baseMaps, idx, null); if (!bm) return
+    if (bm.type === 'style') return //style 型別為整組 style 圖層, 各層自帶 opacity(常為 zoom 表達式, 且含 raster/fill-extrusion 等多種 paint), 不支援整組透明度調整
     bm.opacity = parseFloat(val)
     let id = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
     if (!map || !map.getLayer(id)) return
@@ -264,6 +338,7 @@ export function setOverlayOpacity(map, baseMaps, idx, val) {
 export function updateBaseMapPaint(map, baseMaps, idx) {
     if (!map) return
     let bm = get(baseMaps, idx, null); if (!bm) return
+    if (bm.type === 'style') return //style 型別不支援 paint 更新(理由見 setOverlayOpacity)
     let layerId = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
     if (!map.getLayer(layerId)) return
     if (bm.type === 'vector') {
@@ -342,13 +417,14 @@ export function isBaseMapsStructuralDiff(prev, next) {
  */
 export function updateBaseMapsIncremental(map, baseMaps) {
     if (!map || !isarr(baseMaps)) return
-    let keys = baseMapKeys(baseMaps)
-    // 1) paint 與 visibility 全部就地更新
+    // 1) paint 與 visibility 全部就地更新(style 型別為一組 layer id, 逐一設定)
     each(baseMaps, (bm, k) => {
-        let id = `basemap-layer-${keys[k]}`
-        if (!map.getLayer(id)) return
+        let ids = baseMapLayerIds(map, baseMaps, k)
+        if (ids.length === 0) return
         updateBaseMapPaint(map, baseMaps, k)
-        map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+        each(ids, (id) => {
+            map.setLayoutProperty(id, 'visibility', bm.visible ? 'visible' : 'none')
+        })
     })
     // 2) 疊加層(colorShade 空字串)依陣列序 moveLayer 至「hillshade(若有)之下, 否則首個資料圖層之下」;
     //    維持「底圖 < 疊加層 < hillshade < 資料」疊序與完整重建路徑一致, 底圖恆在最底, 不動
@@ -361,7 +437,8 @@ export function updateBaseMapsIncremental(map, baseMaps) {
     }
     each(baseMaps, (bm, k) => {
         if (isestr(bm.colorShade)) return //僅疊加層需重排, 底圖不動
-        let id = `basemap-layer-${keys[k]}`
-        if (map.getLayer(id)) map.moveLayer(id, beforeId)
+        each(baseMapLayerIds(map, baseMaps, k), (id) => {
+            map.moveLayer(id, beforeId) //style 型別依原序逐一搬移整組, 維持組內相對順序
+        })
     })
 }
