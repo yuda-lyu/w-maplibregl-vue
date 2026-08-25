@@ -33,5 +33,5 @@ Add script for vue.
 
 Add script for w-maplibregl-vue.
 ```alias
-<script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.36/dist/w-maplibregl-vue.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.37/dist/w-maplibregl-vue.umd.js"></script>
 ```

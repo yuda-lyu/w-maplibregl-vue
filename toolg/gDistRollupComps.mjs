@@ -10,10 +10,7 @@ rollupFiles({
     fdSrc,
     fdTar,
     format: 'umd',
-    //nameDistType: 'kebabCase',
-    hookNameDist: () => {
-        return 'w-maplibregl-vue'
-    },
+    nameDistType: 'kebabCase',
     globals: {
     },
     external: [
