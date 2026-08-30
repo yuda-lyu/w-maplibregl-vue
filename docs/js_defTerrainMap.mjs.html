@@ -3,7 +3,7 @@
 <head>
     
     <meta charset="utf-8">
-    <title>Home - Documentation</title>
+    <title>js/defTerrainMap.mjs - Documentation</title>
     
     
     <script src="scripts/prettify/prettify.js"></script>
@@ -35,31 +35,42 @@
 
 <div id="main">
     
+    <h1 class="page-title">js/defTerrainMap.mjs</h1>
+    
 
     
 
 
 
     
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * defTerrainMap.mjs
+ * 預設3D地形資料源設定, 供組件預設值使用, 亦可由外部直接引用或作為自訂設定之基礎
+ */
+let defTerrainMap = {
+    terrainSource: {
+        url: '//s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+        layerType: 'raster-dem',
+        encoding: 'terrarium',
+        tileSize: 256,
+        maxzoom: 13,
+    },
+    // hillshadeSource: {
+    //     url: '//s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+    //     layerType: 'raster-dem',
+    //     encoding: 'terrarium',
+    //     tileSize: 256,
+    //     maxzoom: 13,
+    // },
+}
 
 
-    <section class="package">
-        <h3> </h3>		
+export default defTerrainMap
+</code></pre>
+        </article>
     </section>
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
 
 
 

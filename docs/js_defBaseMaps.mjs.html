@@ -1,3 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>js/defBaseMaps.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-CmpPopupResizable.html">CmpPopupResizable</a></li><li><a href="module-WMaplibreglVue.html">WMaplibreglVue</a></li></ul><h3>Global</h3><ul><li><a href="global.html#CONTOUR_AGG_SRC">CONTOUR_AGG_SRC</a></li><li><a href="global.html#GEOJSON_AGG_PTS_SRC">GEOJSON_AGG_PTS_SRC</a></li><li><a href="global.html#KEY_HOVER_MANAGER">KEY_HOVER_MANAGER</a></li><li><a href="global.html#KEY_ICON_FP">KEY_ICON_FP</a></li><li><a href="global.html#KEY_SETS_STORE">KEY_SETS_STORE</a></li><li><a href="global.html#POLYGON_AGG_SRC">POLYGON_AGG_SRC</a></li><li><a href="global.html#POLYLINE_AGG_SRC">POLYLINE_AGG_SRC</a></li><li><a href="global.html#applyBaseMaps">applyBaseMaps</a></li><li><a href="global.html#applyProjection">applyProjection</a></li><li><a href="global.html#applyTerrain">applyTerrain</a></li><li><a href="global.html#buildContourLegend">buildContourLegend</a></li><li><a href="global.html#buildItemsList">buildItemsList</a></li><li><a href="global.html#buildPanelStyle">buildPanelStyle</a></li><li><a href="global.html#buildPolygonGeometry">buildPolygonGeometry</a></li><li><a href="global.html#calcPanToCenter">calcPanToCenter</a></li><li><a href="global.html#calcPolygonCenter">calcPolygonCenter</a></li><li><a href="global.html#calcPolylineCenter">calcPolylineCenter</a></li><li><a href="global.html#clearTrackedByPrefix">clearTrackedByPrefix</a></li><li><a href="global.html#computeBasicOpt">computeBasicOpt</a></li><li><a href="global.html#computeClusterOpts">computeClusterOpts</a></li><li><a href="global.html#computePanelBaseMaps">computePanelBaseMaps</a></li><li><a href="global.html#computePanelCompass3d">computePanelCompass3d</a></li><li><a href="global.html#computePanelCompassRose">computePanelCompassRose</a></li><li><a href="global.html#computePanelItems">computePanelItems</a></li><li><a href="global.html#computePanelLabels">computePanelLabels</a></li><li><a href="global.html#computePanelLegends">computePanelLegends</a></li><li><a href="global.html#computePanelScale">computePanelScale</a></li><li><a href="global.html#computePanelZoom">computePanelZoom</a></li><li><a href="global.html#countVisible">countVisible</a></li><li><a href="global.html#createDirectionalPopup">createDirectionalPopup</a></li><li><a href="global.html#createMap">createMap</a></li><li><a href="global.html#defBaseMaps">defBaseMaps</a></li><li><a href="global.html#defTerrainMap">defTerrainMap</a></li><li><a href="global.html#fastRingGroupToPolygons">fastRingGroupToPolygons</a></li><li><a href="global.html#findPointById">findPointById</a></li><li><a href="global.html#freezeCoordField">freezeCoordField</a></li><li><a href="global.html#getContourColor">getContourColor</a></li><li><a href="global.html#getMapObject">getMapObject</a></li><li><a href="global.html#isBaseMapsPaintOnlyDiff">isBaseMapsPaintOnlyDiff</a></li><li><a href="global.html#isBaseMapsStructuralDiff">isBaseMapsStructuralDiff</a></li><li><a href="global.html#offDelegatedListenersByLayer">offDelegatedListenersByLayer</a></li><li><a href="global.html#offLayerHover">offLayerHover</a></li><li><a href="global.html#pointInRing">pointInRing</a></li><li><a href="global.html#preloadBaseMapStyles">preloadBaseMapStyles</a></li><li><a href="global.html#ptOnSeg">ptOnSeg</a></li><li><a href="global.html#recheckSinglePopupDir">recheckSinglePopupDir</a></li><li><a href="global.html#renderImageSets">renderImageSets</a></li><li><a href="global.html#renderPointSets">renderPointSets</a></li><li><a href="global.html#resolveFeatureById">resolveFeatureById</a></li><li><a href="global.html#ringBBox">ringBBox</a></li><li><a href="global.html#ringsHaveCrossing">ringsHaveCrossing</a></li><li><a href="global.html#setOverlayOpacity">setOverlayOpacity</a></li><li><a href="global.html#switchBaseMap">switchBaseMap</a></li><li><a href="global.html#toggleOverlayVisible">toggleOverlayVisible</a></li><li><a href="global.html#tryBuildPolygonGeometryFast">tryBuildPolygonGeometryFast</a></li><li><a href="global.html#updateBaseMapPaint">updateBaseMapPaint</a></li><li><a href="global.html#updateBaseMapsIncremental">updateBaseMapsIncremental</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">js/defBaseMaps.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * defBaseMaps.mjs
+ * 預設底圖與疊圖清單, 供組件預設值使用, 亦可由外部直接引用或作為自訂清單之基礎
+ */
 let defBaseMaps = [
     {
         name: 'Mapbox',
@@ -70,21 +121,21 @@ let defBaseMaps = [
     // //使用google.cn圖資, maplibre-gl嚴格限制cors無法使用
     // {
     //     name: 'GoogleStreets',
-    //     url: '//www.google.cn/maps/vt?lyrs=m@189&gl=cn&x={x}&y={y}&z={z}',
+    //     url: '//www.google.cn/maps/vt?lyrs=m@189&amp;gl=cn&amp;x={x}&amp;y={y}&amp;z={z}',
     //     colorShade: 'light',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: 'GoogleSatellite',
-    //     url: '//www.google.cn/maps/vt?lyrs=s@189&gl=cn&x={x}&y={y}&z={z}',
+    //     url: '//www.google.cn/maps/vt?lyrs=s@189&amp;gl=cn&amp;x={x}&amp;y={y}&amp;z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: 'GoogleHybrid',
-    //     url: '//www.google.cn/maps/vt?lyrs=s,h@189&gl=cn&x={x}&y={y}&z={z}',
+    //     url: '//www.google.cn/maps/vt?lyrs=s,h@189&amp;gl=cn&amp;x={x}&amp;y={y}&amp;z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,
@@ -141,28 +192,28 @@ let defBaseMaps = [
     // //google要申請tokne才能用
     // {
     //     name: 'GoogleStreets',
-    //     url: 'http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    //     url: 'http://{s}.google.com/vt/lyrs=m&amp;x={x}&amp;y={y}&amp;z={z}',
     //     colorShade: 'light',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: 'GoogleHybrid',
-    //     url: 'http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',
+    //     url: 'http://{s}.google.com/vt/lyrs=s,h&amp;x={x}&amp;y={y}&amp;z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: 'GoogleSat',
-    //     url: 'http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    //     url: 'http://{s}.google.com/vt/lyrs=s&amp;x={x}&amp;y={y}&amp;z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: 'GoogleTerrain',
-    //     url: 'http://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+    //     url: 'http://{s}.google.com/vt/lyrs=p&amp;x={x}&amp;y={y}&amp;z={z}',
     //     colorShade: 'dark',
     //     opacity: 1,
     //     visible: false,
@@ -268,35 +319,35 @@ let defBaseMaps = [
     // },
     // {
     //     name: '五十萬之一地體構造圖',
-    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=500K_TECTONIC_MAP_1978&STYLE=default&FORMAT=image/png&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&amp;REQUEST=GetTile&amp;VERSION=1.0.0&amp;LAYER=500K_TECTONIC_MAP_1978&amp;STYLE=default&amp;FORMAT=image/png&amp;TILEMATRIXSET=GoogleMapsCompatible&amp;TILEMATRIX={z}&amp;TILEROW={y}&amp;TILECOL={x}',
     //     colorShade: '',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: '五十萬之一變質相圖',
-    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=500K_METAMORPHIC_FACIES_MAP_1994&STYLE=default&FORMAT=image/png&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&amp;REQUEST=GetTile&amp;VERSION=1.0.0&amp;LAYER=500K_METAMORPHIC_FACIES_MAP_1994&amp;STYLE=default&amp;FORMAT=image/png&amp;TILEMATRIXSET=GoogleMapsCompatible&amp;TILEMATRIX={z}&amp;TILEROW={y}&amp;TILECOL={x}',
     //     colorShade: '',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: '五十萬之一附近海域沉積物分佈圖',
-    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=500K_OFFSHORE_SEDIMENT_MAP_1995&STYLE=default&FORMAT=image/png&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&amp;REQUEST=GetTile&amp;VERSION=1.0.0&amp;LAYER=500K_OFFSHORE_SEDIMENT_MAP_1995&amp;STYLE=default&amp;FORMAT=image/png&amp;TILEMATRIXSET=GoogleMapsCompatible&amp;TILEMATRIX={z}&amp;TILEROW={y}&amp;TILECOL={x}',
     //     colorShade: '',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: '五十萬之一陸上砂資源分佈與品質圖',
-    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=500K_LAND_GRAVEL_MAP_1998&STYLE=default&FORMAT=image/png&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&amp;REQUEST=GetTile&amp;VERSION=1.0.0&amp;LAYER=500K_LAND_GRAVEL_MAP_1998&amp;STYLE=default&amp;FORMAT=image/png&amp;TILEMATRIXSET=GoogleMapsCompatible&amp;TILEMATRIX={z}&amp;TILEROW={y}&amp;TILECOL={x}',
     //     colorShade: '',
     //     opacity: 1,
     //     visible: false,
     // },
     // {
     //     name: '五十萬之一能源礦產及地下水資源分佈圖',
-    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=500K_ENERGY_GROUNDWATER_REOUSRCE_2006&STYLE=default&FORMAT=image/png&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    //     url: 'https://geomap.gsmma.gov.tw/api/Tile/v1/getTile.cfm?SERVICE=WMTS&amp;REQUEST=GetTile&amp;VERSION=1.0.0&amp;LAYER=500K_ENERGY_GROUNDWATER_REOUSRCE_2006&amp;STYLE=default&amp;FORMAT=image/png&amp;TILEMATRIXSET=GoogleMapsCompatible&amp;TILEMATRIX={z}&amp;TILEROW={y}&amp;TILECOL={x}',
     //     colorShade: '',
     //     opacity: 1,
     //     visible: false,
@@ -466,3 +517,28 @@ let defBaseMaps = [
 
 
 export default defBaseMaps
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Aug 30 2026 18:51:52 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>
