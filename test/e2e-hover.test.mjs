@@ -52,7 +52,7 @@
 //               新函數生效, #clickLog 顯示其寫入內容
 import assert from 'assert'
 import { chromium } from 'playwright'
-import { baseUrl, startServer, waitUntilExist } from './e2e-setup.mjs'
+import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 
 // 範例頁 AppBSCHoverInteractions 之固定地圖參數(與該頁 opt 一致)
 const MAP_CENTER = [24.0, 121.0] //[lat, lng]

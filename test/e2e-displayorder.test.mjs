@@ -13,7 +13,7 @@
 // 無 i18n 文字差異(範例固定中英標籤), 故單一變體。每個 it() 各自 new browser。
 import assert from 'assert'
 import { chromium } from 'playwright'
-import { baseUrl, startServer, waitUntilExist } from './e2e-setup.mjs'
+import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 
 describe('e2e-displayorder', function() {
     this.timeout(180000)
