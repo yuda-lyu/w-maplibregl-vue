@@ -4,7 +4,7 @@
  */
 import isNumber from 'lodash-es/isNumber.js'
 import isarr from 'wsemi/src/isarr.mjs'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl' //maplibre-gl 6.x 起為 ESM-only 且移除 default export, 須以 namespace 方式匯入
 
 
 //方向 → maplibre Popup anchor/offset 對照(gap 為與錨點間距, anchorOffset 為額外偏移 [dx,dy], 正x=右移/正y=下移)。

@@ -51,7 +51,7 @@
 //   - E2E-017 runtime 更換全域點擊函數: 點 #btnSwapClick 後點擊 circle 點 →
 //               新函數生效, #clickLog 顯示其寫入內容
 import assert from 'assert'
-import { chromium } from 'playwright'
+import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 
 // 範例頁 AppBSCHoverInteractions 之固定地圖參數(與該頁 opt 一致)
@@ -83,7 +83,8 @@ describe('e2e-hover', function() {
     let page = null
     let cbb = null //canvas boundingBox(viewport 座標)
     beforeEach(async function() {
-        browser = await chromium.launch({ headless: true })
+        //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
+        browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
         page = await ctx.newPage()
     })

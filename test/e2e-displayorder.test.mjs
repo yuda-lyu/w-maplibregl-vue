@@ -12,7 +12,7 @@
 // act 全走 user-facing(滑鼠點擊選單/checkbox/canvas); assert 走 user-facing(popup 顯示文字)。
 // 無 i18n 文字差異(範例固定中英標籤), 故單一變體。每個 it() 各自 new browser。
 import assert from 'assert'
-import { chromium } from 'playwright'
+import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 
 describe('e2e-displayorder', function() {
@@ -26,7 +26,8 @@ describe('e2e-displayorder', function() {
     let browser = null
     let page = null
     beforeEach(async function() {
-        browser = await chromium.launch({ headless: true })
+        //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
+        browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
         page = await ctx.newPage()
     })

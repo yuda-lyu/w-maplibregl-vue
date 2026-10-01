@@ -53,7 +53,7 @@
 //               藍在南(北側取樣兩張相同、南側取樣兩張相同, 且北南不同色); style 之 image source
 //               coordinates 首角(左上)緯度須大於末角(左下)(補強)
 import assert from 'assert'
-import { chromium } from 'playwright'
+import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 
 // 範例頁 AppBSCRuntimeSync 之固定地圖參數(與該頁 opt 一致)
@@ -89,7 +89,8 @@ describe('e2e-runtime', function() {
     let page = null
     let cbb = null //canvas boundingBox(viewport 座標)
     beforeEach(async function() {
-        browser = await chromium.launch({ headless: true })
+        //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
+        browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
         page = await ctx.newPage()
     })

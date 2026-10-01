@@ -32,5 +32,8 @@ let opt = {
     external: [
     ],
 }
+//注意: 本產物包含 src/js/maplibreWorkerInline.mjs(內嵌之 maplibre worker 原始碼), 其來源為
+//App.vue → 各範例組件 → components/WMaplibreglVue.vue → js/mapCore.mjs → js/maplibreWorkerInline.mjs。
+//該檔須先由 toolg/gDistRollupMaplibreGlWorker.mjs 產製, 見 script.txt 之執行順序(本腳本之前)
 rollupVueToHtml('./src/App.vue', './docs/examples/app.html', opt)
 
