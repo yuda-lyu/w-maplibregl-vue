@@ -1,12 +1,12 @@
 {
   "name": "w-maplibregl-vue",
-  "version": "1.0.51",
+  "version": "1.0.52",
   "main": "dist/w-maplibregl-vue.umd.js",
   "dependencies": {
     "maplibre-gl": "^6.11.2",
-    "w-component-vue": "^2.5.26",
-    "w-gis": "^1.1.4",
-    "wsemi": "^1.9.9"
+    "w-component-vue": "^2.5.27",
+    "w-gis": "^1.1.5",
+    "wsemi": "^1.9.11"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "^5.0.8",
