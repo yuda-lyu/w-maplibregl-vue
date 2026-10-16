@@ -1,0 +1,464 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-tw">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>example for AppBSCZoomRange</title>
+
+    <!-- @babel/polyfill -->
+    <script
+        nomodule
+        src="https://cdn.jsdelivr.net/npm/@babel/polyfill/dist/polyfill.min.js"
+    ></script>
+
+    <!-- vue -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.min.js"></script>
+
+    <!-- extractHtml已自動添加@babel/polyfill與vue -->
+
+    <!-- maplibre-gl已包入 -->
+    <script
+        _src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.js"
+    ></script>
+    <link
+        rel="stylesheet"
+        _href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.css"
+    />
+
+    <!-- w-maplibregl-vue -->
+    <script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.55/dist/w-maplibregl-vue.umd.js"></script>
+
+    <!-- lodash -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash/lodash.min.js"></script>
+
+    <!-- wsemi -->
+    <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.min.js"></script>
+
+    <!-- w-gis -->
+    <script _src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/w-gis.umd.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/interp2.wk.umd.js"
+    ></script>
+
+    <!-- data -->
+    <script src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRain.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRainClip.js"
+    ></script>
+
+    <!-- w-jsonview-tree -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-jsonview-tree@latest/dist/w-jsonview-tree.umd.js"
+    ></script>
+    <script>
+  let jv = window["w-jsonview-tree"];
+    </script>
+
+    <style>
+  .item-link {
+    display: inline-block;
+    margin: 10px 10px 0px 0px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    color: #fff;
+    background-color: #443a65;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .bkh {
+    /* 寬 */
+    padding: 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkh {
+      padding: 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkh {
+      padding: 5px;
+    }
+  }
+  .bkp {
+    /* 寬 */
+    padding: 0px 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkp {
+      padding: 0px 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkp {
+      padding: 0px 5px;
+    }
+  }
+    </style>
+</head>
+<body
+    style="font-family:'Microsoft JhengHei','Avenir','Helvetica'; padding:0px; margin:0px;"
+>
+    <div id="app" class="bkh" style>
+        <div>
+            <div style="padding-bottom:10px; font-size:0.85rem; color:#777;">
+                圖台縮放範圍驗證頁(e2e 用):
+                <b>opt.minZoom</b>(預設0)與
+                <b>opt.maxZoom</b>(預設22)只交給地圖把關，元件不再另夾
+                <b>opt.zoom</b>；使用者縮放、縮放按鈕、滾輪、opt.zoom與API皆受此範圍限制，並以地圖實際層級寫回opt.zoom。底圖為頁內自訂協定e2ezr://供應之單色圖磚(免網路)，另含3個相距約1m之點與叢集(clusterPointsMaxZoom:20，非建議配置，僅驗證叢集展開層級大於18時不彈回)。
+            </div>
+
+            <div style="padding-bottom:6px;">
+                <span style="color:#a3c; font-size:0.85rem;">
+                    父層opt即時值 - zoom:
+                    <span id="optZoom">{{ fmt(opt.zoom, 4) }}</span>,
+                    center:
+                    <span id="optCenter">{{ fmtCenter(opt.center) }}</span>,
+                    minZoom:
+                    <span id="optMin">{{ String(opt.minZoom) }}</span>,
+                    maxZoom:
+                    <span id="optMax">{{ String(opt.maxZoom) }}</span>,
+                    projection:
+                    <span id="optProj">{{ String(opt.projection) }}</span>
+                </span>
+            </div>
+
+            <div style="padding-bottom:6px;">
+                <button
+                    id="btnMax20"
+                    style="cursor:pointer; padding:4px 10px;"
+                    @click="opt.maxZoom = 20"
+                >maxZoom=20</button>
+                <button
+                    id="btnMin5"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.minZoom = 5"
+                >minZoom=5</button>
+                <button
+                    id="btnShrink"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.maxZoom = 8"
+                >maxZoom=8(收縮)</button>
+                <button
+                    id="btnExpand"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.maxZoom = 22"
+                >maxZoom=22(放寬)</button>
+                <button
+                    id="btnBad"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="setBad"
+                >minZoom=14, maxZoom=10(min大於max)</button>
+                <button
+                    id="btnShrinkMove"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="setShrinkMove"
+                >maxZoom=8 + center同一tick</button>
+                <button
+                    id="btnShrinkZoomMove"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="setShrinkZoomMove"
+                >maxZoom=8 + zoom=8 + center同一tick</button>
+            </div>
+            <div style="padding-bottom:6px;">
+                <button
+                    id="btnFly"
+                    style="cursor:pointer; padding:4px 10px;"
+                    @click="setFly"
+                >center+zoom=14同一tick</button>
+                <button
+                    id="btnReplace"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="replaceOpt"
+                >整個換新opt(center+zoom=14)</button>
+                <button
+                    id="btnPan"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.center = [23.5, 120.9]"
+                >只改center</button>
+                <button
+                    id="btnZoom3"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.zoom = 3"
+                >zoom=3</button>
+                <button
+                    id="btnZoom7"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.zoom = 7"
+                >zoom=7</button>
+                <button
+                    id="btnZoom10"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.zoom = 10"
+                >zoom=10</button>
+                <button
+                    id="btnZoom14"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.zoom = 14"
+                >只改zoom=14</button>
+                <button
+                    id="btnZoom04"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.zoom = 0.4"
+                >zoom=0.4</button>
+            </div>
+            <div style="padding-bottom:6px;">
+                <button
+                    id="btnApiZoomTo21"
+                    style="cursor:pointer; padding:4px 10px;"
+                    @click="apiZoomTo(21)"
+                >API zoomTo(21)</button>
+                <button
+                    id="btnApiEaseTo21"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="apiEaseTo(21)"
+                >API easeTo(21)</button>
+                <button
+                    id="btnApiFlyTo20"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="apiFlyTo(20)"
+                >API flyTo(20)</button>
+                <button
+                    id="btnMercator"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.projection = 'mercator'"
+                >projection=mercator</button>
+                <button
+                    id="btnTall"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="boxHeight = 1200"
+                >容器高1200px</button>
+                <button
+                    id="btnBadCenter"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="setBadCenter"
+                >center=[91,121]+zoom=14同一tick</button>
+            </div>
+            <div style="padding-bottom:6px;">
+                <button
+                    id="btnScale1"
+                    style="cursor:pointer; padding:4px 10px;"
+                    @click="setScale(0, 121, 10)"
+                >比例尺: 緯度0 zoom10</button>
+                <button
+                    id="btnScale2"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="setScale(25, 121.5, 16)"
+                >比例尺: 緯度25 zoom16</button>
+                <button
+                    id="btnRemount25"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="remount({ zoom: 25 })"
+                >重新掛載(opt.zoom=25)</button>
+                <button
+                    id="btnRemountNoZoom"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="remount({ zoom: undefined })"
+                >重新掛載(opt未宣告zoom鍵)</button>
+                <button
+                    id="btnRemountMax4"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="remount({ zoom: undefined, maxZoom: 4 })"
+                >重新掛載(未宣告zoom鍵, maxZoom=4)</button>
+                <button
+                    id="btnRemountBad"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="remount({ minZoom: 14, maxZoom: 10 })"
+                >重新掛載(minZoom=14, maxZoom=10)</button>
+                <button
+                    id="btnRemountBadCenter"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="remount({ center: [91, 121] })"
+                >重新掛載(center=[91,121])</button>
+                <button
+                    id="btnRemountTerrain"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="remount({}, true)"
+                >重新掛載(開啟地形)</button>
+            </div>
+            <div style="padding-bottom:10px;">
+                <button
+                    id="btnPanThenZoom"
+                    style="cursor:pointer; padding:4px 10px;"
+                    @click="panThenZoom"
+                >center改新值, 150ms後zoom=14(跨tick)</button>
+                <button
+                    id="btnPanPanZoom"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="panPanZoom"
+                >center改A, 120ms後改B, 再140ms後zoom=14</button>
+                <button
+                    id="btnShrinkNorth"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="setShrinkNorth"
+                >maxZoom=5 + zoom=5 + center=[60,121]同一tick</button>
+                <button
+                    id="btnMin23"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.minZoom = 23"
+                >minZoom=23(有效範圍不變)</button>
+                <button
+                    id="btnApiMercator"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="apiMercator"
+                >API setProjection(mercator)</button>
+                <button
+                    id="btnTouch"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.panelBackgroundColor = 'rgba(255,255,250,0.95)'"
+                >無關之opt變更(面板底色)</button>
+            </div>
+
+            <div style="position:relative;">
+                <w-maplibregl-vue
+                    v-if="show"
+                    ref="wm"
+                    :style="{ width: '800px', height: boxHeight + 'px' }"
+                    :opt="opt"
+                ></w-maplibregl-vue>
+            </div>
+        </div>
+    </div>
+
+    <script>
+  //install
+  Vue.component("w-maplibregl-vue", window["w-maplibregl-vue"]);
+
+  //initialize
+  new Vue({
+    el: "#app",
+
+    data: function() {
+      return {
+        show: true,
+        boxHeight: 500,
+        opt: genOpt()
+      };
+    },
+    mounted: function() {
+      let vo = this;
+      //e2e 觀察用(僅讀, 不改功能): 公開 API getMapObject()、opt 是否有 zoom 鍵與其值、元件對地圖 setZoom/jumpTo 之呼叫記錄
+      window.__getMap = () => (vo.$refs.wm ? vo.$refs.wm.getMapObject() : null);
+      window.__hasZoomKey = () => "zoom" in vo.opt;
+      window.__getOptZoom = () => vo.opt.zoom;
+      window.__calls = [];
+      let P = maplibregl.Map.prototype;
+      vo.proto0 = { setZoom: P.setZoom, jumpTo: P.jumpTo };
+      for (let name of ["setZoom", "jumpTo"]) {
+        let f = vo.proto0[name];
+        P[name] = function(...args) {
+          window.__calls.push(name);
+          return f.apply(this, args);
+        };
+      }
+    },
+    computed: {},
+    methods: {
+      fmt: function(v, n) {
+        let x = Number(v);
+        return Number.isFinite(x)
+          ? String(Math.round(x * Math.pow(10, n)) / Math.pow(10, n))
+          : String(v);
+      },
+      fmtCenter: function(c) {
+        return Array.isArray(c)
+          ? c.map(x => this.fmt(x, 4)).join(",")
+          : String(c);
+      },
+      //同一 tick 同時設定(單一 handler)
+      setBad: function() {
+        this.opt.minZoom = 14;
+        this.opt.maxZoom = 10;
+      },
+      setShrinkMove: function() {
+        this.opt.maxZoom = 8;
+        this.opt.center = [23.5, 120.9];
+      },
+      setShrinkZoomMove: function() {
+        this.opt.maxZoom = 8;
+        this.opt.zoom = 8;
+        this.opt.center = [23.5, 120.9];
+      },
+      setFly: function() {
+        this.opt.center = [23.5, 120.9];
+        this.opt.zoom = 14;
+      },
+      setBadCenter: function() {
+        this.opt.center = [91, 121];
+        this.opt.zoom = 14;
+      },
+      setScale: function(lat, lng, z) {
+        this.opt.projection = "mercator";
+        this.opt.center = [lat, lng];
+        this.opt.zoom = z;
+      },
+      setShrinkNorth: function() {
+        this.opt.maxZoom = 5;
+        this.opt.zoom = 5;
+        this.opt.center = [60, 121];
+      },
+      replaceOpt: function() {
+        let o = genOpt(); //整個換新 opt 物件(仍帶離線底圖與無地形設定)
+        o.center = [24, 121];
+        o.zoom = 14;
+        this.opt = o;
+      },
+      //跨 tick(父層程式於動畫進行中再改 opt): window.__movingAtZoom 記錄「賦值 zoom 當下地圖是否仍在移動中」, 供 e2e 驗證情境前提
+      panThenZoom: function() {
+        let vo = this;
+        vo.opt.center = [23.5, 120.9];
+        setTimeout(() => {
+          window.__movingAtZoom = vo.$refs.wm.getMapObject().isMoving();
+          vo.opt.zoom = 14;
+        }, 150);
+      },
+      panPanZoom: function() {
+        let vo = this;
+        vo.opt.center = [23.5, 120.9];
+        setTimeout(() => {
+          vo.opt.center = [24.5, 121.5];
+        }, 120);
+        setTimeout(() => {
+          window.__movingAtZoom = vo.$refs.wm.getMapObject().isMoving();
+          vo.opt.zoom = 14;
+        }, 260);
+      },
+      apiMercator: function() {
+        this.$refs.wm.getMapObject().setProjection({ type: "mercator" });
+      },
+      //重新掛載元件: 以全新 opt 建圖(zoom 為 undefined 時 opt 不含 zoom 鍵; terrain=true 開啟地形)
+      remount: function(patch, terrain) {
+        let vo = this;
+        let o = genOpt(terrain);
+        for (let k of Object.keys(patch)) {
+          if (patch[k] === undefined) delete o[k];
+          else o[k] = patch[k];
+        }
+        vo.show = false;
+        vo.$nextTick(() => {
+          vo.opt = o;
+          vo.show = true;
+        });
+      },
+      //公開 API(使用端程式呼叫 getMapObject() 取得 map 後操作)
+      apiZoomTo: function(z) {
+        this.$refs.wm.getMapObject().zoomTo(z);
+      },
+      apiEaseTo: function(z) {
+        this.$refs.wm.getMapObject().easeTo({ zoom: z });
+      },
+      apiFlyTo: function(z) {
+        this.$refs.wm.getMapObject().flyTo({ zoom: z });
+      }
+    }
+  });
+    </script>
+</body>
+</html>

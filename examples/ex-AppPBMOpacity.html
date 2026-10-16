@@ -1,0 +1,188 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-tw">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>example for AppPBMOpacity</title>
+
+    <!-- @babel/polyfill -->
+    <script
+        nomodule
+        src="https://cdn.jsdelivr.net/npm/@babel/polyfill/dist/polyfill.min.js"
+    ></script>
+
+    <!-- vue -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.min.js"></script>
+
+    <!-- extractHtml已自動添加@babel/polyfill與vue -->
+
+    <!-- maplibre-gl已包入 -->
+    <script
+        _src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.js"
+    ></script>
+    <link
+        rel="stylesheet"
+        _href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.css"
+    />
+
+    <!-- w-maplibregl-vue -->
+    <script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.55/dist/w-maplibregl-vue.umd.js"></script>
+
+    <!-- lodash -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash/lodash.min.js"></script>
+
+    <!-- wsemi -->
+    <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.min.js"></script>
+
+    <!-- w-gis -->
+    <script _src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/w-gis.umd.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/interp2.wk.umd.js"
+    ></script>
+
+    <!-- data -->
+    <script src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRain.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRainClip.js"
+    ></script>
+
+    <!-- w-jsonview-tree -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-jsonview-tree@latest/dist/w-jsonview-tree.umd.js"
+    ></script>
+    <script>
+  let jv = window["w-jsonview-tree"];
+    </script>
+
+    <style>
+  .item-link {
+    display: inline-block;
+    margin: 10px 10px 0px 0px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    color: #fff;
+    background-color: #443a65;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .bkh {
+    /* 寬 */
+    padding: 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkh {
+      padding: 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkh {
+      padding: 5px;
+    }
+  }
+  .bkp {
+    /* 寬 */
+    padding: 0px 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkp {
+      padding: 0px 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkp {
+      padding: 0px 5px;
+    }
+  }
+    </style>
+</head>
+<body
+    style="font-family:'Microsoft JhengHei','Avenir','Helvetica'; padding:0px; margin:0px;"
+>
+    <div id="app" class="bkh" style>
+        <div style="padding-bottom:10px; font-size:0.85rem; color:#777;">
+            baseMaps[i].opacity 驗證頁(e2e 用): 疊加層(colorShade 空字串)的預設透明度與值域由
+            <b>getBaseMapOpacity</b> 單一決定，面板滑桿、百分比與實繪(paint)一致：raster與wms預設1、vector預設0.8，可給數字或數字字串，超出0~1夾限，非數值視為未給；type為'style'時不支援，面板不顯示滑桿。本頁各疊加層未勾選時圖層即已建立(visibility none)，圖磚與 TileJSON 皆免網路。
+        </div>
+
+        <div style="position:relative;">
+            <w-maplibregl-vue
+                ref="wm"
+                style="width:800px; height:500px;"
+                :opt="opt"
+            ></w-maplibregl-vue>
+        </div>
+    </div>
+
+    <script>
+  //install
+  Vue.component("w-maplibregl-vue", window["w-maplibregl-vue"]);
+
+  //initialize
+  new Vue({
+    el: "#app",
+
+    data: function() {
+      return {
+        opt: {
+          center: [0, 121.0],
+          zoom: 10,
+          projection: "mercator",
+          panelLabels: { show: false },
+          panelBaseMaps: {
+            show: true,
+            position: "topleft",
+            terrainMap: {}, //不套用地形
+            baseMaps: [
+              raster("ovRasterDef", {}), //未給 opacity: raster 預設 1
+              {
+                name: "ovWms",
+                layers: "ovWms",
+                type: "wms",
+                url: `${PROTOCOL}://ovWms/wms?`,
+                colorShade: "",
+                visible: false
+              }, //未給 opacity: wms 預設 1(圖層 id 尾碼取 LAYERS 參數)
+              vector("ovVecFill", "fill", {}), //未給 opacity: vector 預設 0.8
+              vector("ovVecLine", "line", {}),
+              vector("ovVecExt", "fill-extrusion", {}),
+              vector("ovVecFill05", "fill", { opacity: 0.5 }), //明給 0.5
+              raster("ovRasterStr", { opacity: "0.5" }), //數字字串 → 0.5
+              raster("ovRasterOver", { opacity: 1.5 }), //超界 → 夾 1
+              raster("ovRasterNeg", { opacity: -0.2 }), //超界 → 夾 0
+              raster("ovRasterNaN", { opacity: NaN }), //非數值 → 未給(raster 預設 1)
+              {
+                name: "ovStyle",
+                layers: "ovStyle",
+                type: "style",
+                url: STYLE_URL,
+                colorShade: "",
+                visible: false
+              } //style 型別: 不支援整組透明度, 面板不顯示滑桿
+            ]
+          }
+        }
+      };
+    },
+    mounted: function() {
+      let vo = this;
+      //e2e 觀察用(僅讀, 不改功能): 地圖 style 快照與公開 API getMapObject()
+      window.__getMapStyle = () => {
+        let m = vo.$refs.wm.getMapObject();
+        return m ? m.getStyle() : null;
+      };
+      window.__getMap = () => vo.$refs.wm.getMapObject();
+    },
+    computed: {},
+    methods: {}
+  });
+    </script>
+</body>
+</html>
