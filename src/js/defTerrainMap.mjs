@@ -5,7 +5,7 @@
 let defTerrainMap = {
     terrainSource: {
         url: '//s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
-        layerType: 'raster-dem',
+        layerType: 'raster-dem', //保留欄位, 程式不讀(地形來源固定為 raster-dem)
         encoding: 'terrarium',
         tileSize: 256,
         maxzoom: 13,

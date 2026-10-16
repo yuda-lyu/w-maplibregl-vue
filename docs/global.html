@@ -815,9 +815,9 @@ click/hover 以 feature 的 _kpg 反查 store 最新資料; 跨組移動由 onLa
     <dt class="tag-description">Description:</dt>
     <dd class="tag-description"><ul class="dummy"><li><p>maplibreWorkerInline.mjs
 maplibre-gl 之 worker 自足打包內嵌字串(機器產製, 請勿手改)</p>
-<p>來源: ./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs(含其相對 import 之 maplibre-gl-shared.mjs)
+<p>來源: ./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs(已打包為無外部 import 之自足單檔)
 產製: node toolg/gDistRollupMaplibreGlWorker.mjs
-maplibre-gl 版本: 6.11.2</p>
+maplibre-gl 版本: 6.14.0</p>
 <p>why: maplibre 6.x 起 worker 為外部檔案, 打包器無法代為處理; 本套件改以 Blob 於執行期載入,
 使使用端無須另行部署 worker 檔案或設定 setWorkerUrl。詳見 toolg/gDistRollupMaplibreGlWorker.mjs</p></li></ul></dd>
     
@@ -867,9 +867,9 @@ maplibre-gl 版本: 6.11.2</p>
 <div class="description usertext">
     <p>maplibreWorkerInline.mjs
 maplibre-gl 之 worker 自足打包內嵌字串(機器產製, 請勿手改)</p>
-<p>來源: ./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs(含其相對 import 之 maplibre-gl-shared.mjs)
+<p>來源: ./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs(已打包為無外部 import 之自足單檔)
 產製: node toolg/gDistRollupMaplibreGlWorker.mjs
-maplibre-gl 版本: 6.11.2</p>
+maplibre-gl 版本: 6.14.0</p>
 <p>why: maplibre 6.x 起 worker 為外部檔案, 打包器無法代為處理; 本套件改以 Blob 於執行期載入,
 使使用端無須另行部署 worker 檔案或設定 setWorkerUrl。詳見 toolg/gDistRollupMaplibreGlWorker.mjs</p>
 </div>
@@ -909,7 +909,7 @@ style 型別讀取 preloadBaseMapStyles 之快取, 未命中即跳過該條目�
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line94">line 94</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line120">line 120</a>
     </li></ul></dd>
     
 
@@ -1227,7 +1227,7 @@ style 型別讀取 preloadBaseMapStyles 之快取, 未命中即跳過該條目�
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line195">line 195</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line227">line 227</a>
     </li></ul></dd>
     
 
@@ -5534,13 +5534,13 @@ Vue 2 之 observe() 對 !Object.isExtensible 者不遞迴、不掛 getter/setter
     <dt class="tag-description">Description:</dt>
     <dd class="tag-description"><ul class="dummy"><li><p>判斷新舊 baseMaps 是否「僅 paint 欄位(colorFillExtrusion/opacity)變更」。
 true → 可只就地 setPaintProperty(updateBaseMapPaint), 無需重建底圖;
-false → 有結構性變更(數量/url/type/layer/layerType/visible 等), 需完整重套 applyBaseMaps。</p></li></ul></dd>
+false → 非僅 paint 變更, 由呼叫端再以 isBaseMapsStructuralDiff 判斷走增量或完整重套。</p></li></ul></dd>
     
 
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line373">line 373</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line405">line 405</a>
     </li></ul></dd>
     
 
@@ -5720,7 +5720,7 @@ true → 有結構性變更, 需完整重套 applyBaseMaps。</p></li></ul></dd>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line397">line 397</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line429">line 429</a>
     </li></ul></dd>
     
 
@@ -6304,7 +6304,7 @@ true → 有結構性變更, 需完整重套 applyBaseMaps。</p></li></ul></dd>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line53">line 53</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line79">line 79</a>
     </li></ul></dd>
     
 
@@ -7653,7 +7653,7 @@ getDisplayOrderByType(): Boolean,
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line313">line 313</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line345">line 345</a>
     </li></ul></dd>
     
 
@@ -7863,7 +7863,7 @@ getDisplayOrderByType(): Boolean,
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line280">line 280</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line312">line 312</a>
     </li></ul></dd>
     
 
@@ -8046,7 +8046,7 @@ getDisplayOrderByType(): Boolean,
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line297">line 297</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line329">line 329</a>
     </li></ul></dd>
     
 
@@ -8397,7 +8397,7 @@ getDisplayOrderByType(): Boolean,
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line338">line 338</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line370">line 370</a>
     </li></ul></dd>
     
 
@@ -8582,7 +8582,7 @@ getDisplayOrderByType(): Boolean,
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line418">line 418</a>
+        <a href="js_basemapManager.mjs.html">js/basemapManager.mjs</a>, <a href="js_basemapManager.mjs.html#line450">line 450</a>
     </li></ul></dd>
     
 
@@ -8740,7 +8740,7 @@ getDisplayOrderByType(): Boolean,
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Oct 11 2026 16:02:02 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Fri Oct 16 2026 13:23:54 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

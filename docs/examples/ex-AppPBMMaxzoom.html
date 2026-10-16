@@ -1,0 +1,194 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-tw">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>example for AppPBMMaxzoom</title>
+
+    <!-- @babel/polyfill -->
+    <script
+        nomodule
+        src="https://cdn.jsdelivr.net/npm/@babel/polyfill/dist/polyfill.min.js"
+    ></script>
+
+    <!-- vue -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.min.js"></script>
+
+    <!-- extractHtml已自動添加@babel/polyfill與vue -->
+
+    <!-- maplibre-gl已包入 -->
+    <script
+        _src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.js"
+    ></script>
+    <link
+        rel="stylesheet"
+        _href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.css"
+    />
+
+    <!-- w-maplibregl-vue -->
+    <script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.54/dist/w-maplibregl-vue.umd.js"></script>
+
+    <!-- lodash -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash/lodash.min.js"></script>
+
+    <!-- wsemi -->
+    <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.min.js"></script>
+
+    <!-- w-gis -->
+    <script _src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/w-gis.umd.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/interp2.wk.umd.js"
+    ></script>
+
+    <!-- data -->
+    <script src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRain.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRainClip.js"
+    ></script>
+
+    <!-- w-jsonview-tree -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-jsonview-tree@latest/dist/w-jsonview-tree.umd.js"
+    ></script>
+    <script>
+  let jv = window["w-jsonview-tree"];
+    </script>
+
+    <style>
+  .item-link {
+    display: inline-block;
+    margin: 10px 10px 0px 0px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    color: #fff;
+    background-color: #443a65;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .bkh {
+    /* 寬 */
+    padding: 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkh {
+      padding: 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkh {
+      padding: 5px;
+    }
+  }
+  .bkp {
+    /* 寬 */
+    padding: 0px 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkp {
+      padding: 0px 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkp {
+      padding: 0px 5px;
+    }
+  }
+    </style>
+</head>
+<body
+    style="font-family:'Microsoft JhengHei','Avenir','Helvetica'; padding:0px; margin:0px;"
+>
+    <div id="app" class="bkh" style>
+        <div
+            style="padding-bottom:10px; font-size:0.85rem; color:#777;"
+        >baseMaps[i].maxzoom 驗證頁(e2e 用): 兩個疊加層之圖磚皆以頁內自訂協定 e2ezlim:// 供應(免網路), 只提供 0~18 級、19 級以上回失敗, 模擬層級有上限之圖磚服務。地圖位於 18 級時 256px 圖磚會請求 19 級: 帶 maxzoom:18 之紅色疊加層改以 18 級圖磚放大顯示; 未給 maxzoom 之藍色疊加層請求不存在之層級而空白並報錯, 可按下方按鈕於執行期補上 maxzoom。</div>
+
+        <div style="padding-bottom:10px;">
+            <button
+                id="btnSetMaxzoom"
+                style="cursor:pointer; padding:4px 10px;"
+                @click="setMaxzoom"
+            >runtime 變更: 為藍色疊加層設 maxzoom 18</button>
+            <span style="margin-left:8px; font-size:0.85rem; color:#a3c;">
+                19 級以上圖磚請求次數 紅:
+                <span id="overRed">{{ over.red }}</span>, 藍:
+                <span id="overBlue">{{ over.blue }}</span>
+            </span>
+        </div>
+
+        <div style="position:relative;">
+            <w-maplibregl-vue
+                ref="wm"
+                style="width:800px; height:500px;"
+                :opt="opt"
+            ></w-maplibregl-vue>
+        </div>
+    </div>
+
+    <script>
+  //install
+  Vue.component("w-maplibregl-vue", window["w-maplibregl-vue"]);
+
+  //initialize
+  new Vue({
+    el: "#app",
+
+    data: function() {
+      return {
+        over: { red: 0, blue: 0 }, //19 級以上(服務沒有之層級)之請求次數, 顯示於頁面供觀察
+        opt: {
+          center: [25.06, 121.5153],
+          zoom: 18, //元件允許之最大顯示層級; 256px 圖磚於此請求 19 級
+          projection: "mercator",
+          panelBaseMaps: {
+            show: true,
+            position: "topleft",
+            terrainMap: {}, //不套用地形(離線決定性; 無地形時未給 maxzoom 之空白才可見於畫面)
+            baseMaps: [
+              {
+                name: "紅 maxzoom:18",
+                url: `${PROTOCOL}://red/{z}/{x}/{y}`,
+                colorShade: "",
+                visible: false,
+                opacity: 1,
+                maxzoom: MAX_TILE_ZOOM
+              },
+              {
+                name: "藍 未給maxzoom",
+                url: `${PROTOCOL}://blue/{z}/{x}/{y}`,
+                colorShade: "",
+                visible: false,
+                opacity: 1
+              }
+            ]
+          }
+        }
+      };
+    },
+    mounted: function() {
+      let vo = this;
+      //e2e 補強斷言用: 曝露地圖 style 快照(僅供測試讀取 source 設定, 不影響功能)
+      window.__getMapStyle = () => {
+        let m = vo.$refs.wm.getMapObject();
+        return m ? m.getStyle() : null;
+      };
+    },
+    computed: {},
+    methods: {
+      //執行期為藍色疊加層補上 maxzoom(新增鍵須 $set 才觸發 deep watcher): 應走結構性重建而即時生效
+      setMaxzoom: function() {
+        this.$set(this.opt.panelBaseMaps.baseMaps[1], "maxzoom", MAX_TILE_ZOOM);
+      }
+    }
+  });
+    </script>
+</body>
+</html>

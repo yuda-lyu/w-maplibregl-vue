@@ -82,6 +82,8 @@
 
             <AppPBMColorFillExtrusion v-if="showSubCmp==='baseMap.colorFillExtrusion'"></AppPBMColorFillExtrusion>
 
+            <AppPBMMaxzoom v-if="showSubCmp==='baseMap.maxzoom'"></AppPBMMaxzoom>
+
             <AppPSCShow v-if="showSubCmp==='panelScale.show'"></AppPSCShow>
 
             <AppPSCPosition v-if="showSubCmp==='panelScale.position'"></AppPSCPosition>
@@ -306,6 +308,7 @@ import AppPBMWidth from './AppPBMWidth.vue'
 import AppPBMMaxWidth from './AppPBMMaxWidth.vue'
 import AppPBMMaxHeight from './AppPBMMaxHeight.vue'
 import AppPBMColorFillExtrusion from './AppPBMColorFillExtrusion.vue'
+import AppPBMMaxzoom from './AppPBMMaxzoom.vue'
 import AppPSCShow from './AppPSCShow.vue'
 import AppPSCPosition from './AppPSCPosition.vue'
 import AppPCRShow from './AppPCRShow.vue'
@@ -426,6 +429,7 @@ export default {
         AppPBMMaxWidth,
         AppPBMMaxHeight,
         AppPBMColorFillExtrusion,
+        AppPBMMaxzoom,
         AppPSCShow,
         AppPSCPosition,
         AppPCRShow,
@@ -549,6 +553,7 @@ export default {
                     'panelBaseMaps.maxWidth',
                     'panelBaseMaps.maxHeight',
                     'baseMap.colorFillExtrusion',
+                    'baseMap.maxzoom',
                 ],
                 panelScale: [
                     'panelScale.show',

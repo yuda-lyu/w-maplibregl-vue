@@ -28,6 +28,7 @@ let defBaseMaps = [
         colorShade: 'light',
         opacity: 1,
         visible: false,
+        maxzoom: 17, //服務只提供至 17 級(18 級起回固定佔位圖且無 CORS 標頭), 超出改以 17 級放大顯示
     },
 
     {

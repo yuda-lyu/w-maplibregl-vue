@@ -8,10 +8,19 @@ import { rollup } from 'rollup'
 //供執行期以 Blob + setWorkerUrl 載入, 使本套件於任何環境(umd script / webpack / vite / 下游 bundler)
 //皆無須外部 worker 檔案。
 //
-//why 需要打包而非直接內嵌 maplibre-gl-worker.mjs 原檔:
-//  該原檔會以相對路徑 import 同目錄之 maplibre-gl-shared.mjs(約 516KB), 內嵌成 Blob 後其相對 import
-//  會以 blob: URL 為基準解析而必然失敗, 故須先以 rollup 將 shared 併入成無外部 import 之單檔。
+//why 先以 rollup 打包而非直接內嵌 maplibre-gl-worker.mjs 原檔:
+//  Blob 內之相對 import 會以 blob: URL 為基準解析而必然失敗, 故內嵌前須確保 worker 無任何外部 import。
+//  6.13.0 前 worker 會以相對路徑 import 同目錄之 maplibre-gl-shared.mjs(約 516KB), 須打包併入;
+//  6.13.0 起 worker 已自足、shared 改為空檔(預定下一主版移除)。仍保留打包與自足性檢查,
+//  使本腳本不依賴 maplibre 之內部檔案結構, 日後若再拆檔即由下方檢查明確報錯。
 //  maplibre v6 僅提供 setWorkerUrl(string), 未提供可傳入 Worker 類別或工廠之入口, 故只能走此路。
+//
+//why 本套件對 maplibre-gl 之依賴須為固定版號(如 6.14.0, 不可用 ^ 或 ~):
+//  內嵌 worker 係依「本套件開發端所安裝之版本」打包; 若依賴為範圍版號, 使用端可能安裝到較新版之
+//  maplibre-gl 主程式(以 src 引用本套件時, 主程式取自使用端 node_modules), 與內嵌 worker 版本不一致。
+//  maplibre 不保證主程式與 worker 跨版相容(其 6.13.0 即修正「stale cached worker crashing the map」)。
+//  固定版號後, npm 保證本套件 src 所解析之 maplibre-gl 必為該版(使用端另依賴他版時會為本套件巢狀安裝),
+//  故下方會檢查 package.json 之版號為固定且與實際安裝版相同, 不符即拋錯。
 //
 //why 以 JSON.stringify 內嵌而不轉 base64:
 //  w-package-tools 之 rollupWorkerCore 係將程式碼內嵌於「模板字串」內再轉譯, 特殊符號(反引號、${}、$&)
@@ -22,12 +31,13 @@ import { rollup } from 'rollup'
 //  沿用其做法之處為「Blob + createObjectURL 建立 worker」, 見 src/js/mapCore.mjs。
 //
 //此檔之產出物須入版控: dev(webpack)與 build(rollup)兩種情境皆於編譯期讀取它。
-//maplibre-gl 升版後須重跑本腳本; 另於 gDistRollupComps.mjs 內會自動先行呼叫, 故 dist 永為最新。
+//maplibre-gl 升版後須重跑本腳本; 發布流程見 script.txt, 須排於 gDistApp.mjs 與 gDistRollupComps.mjs 之前。
 //用法: node toolg/gDistRollupMaplibreGlWorker.mjs
 
 let fpEntry = './node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs'
 let fpTar = './src/js/maplibreWorkerInline.mjs'
 let fpPkg = './node_modules/maplibre-gl/package.json'
+let fpPkgSelf = './package.json'
 
 
 async function gDistRollupMaplibreGlWorker() {
@@ -39,7 +49,16 @@ async function gDistRollupMaplibreGlWorker() {
     //maplibre-gl 版本: 內嵌供執行期比對, 避免內嵌 worker 與主程式版本不一致而靜默出錯
     let ver = JSON.parse(fs.readFileSync(fpPkg, 'utf8')).version
 
-    //rollup: 入口為 worker, 其相對 import 之 shared 會被併入(shared 本身無 import, 故無須任何 plugin)
+    //check, 本套件之 maplibre-gl 依賴須為固定版號, 且與實際安裝版相同(理由見檔首)
+    let spec = String((JSON.parse(fs.readFileSync(fpPkgSelf, 'utf8')).dependencies || {})['maplibre-gl'] || '')
+    if (!/^\d+\.\d+\.\d+$/.test(spec)) {
+        throw new Error(`package.json 之 dependencies.maplibre-gl 須為固定版號(如 6.14.0), 現為[${spec}]; 用範圍版號時使用端可能安裝到與內嵌 worker 不同版之 maplibre-gl`)
+    }
+    if (spec !== ver) {
+        throw new Error(`package.json 指定 maplibre-gl@${spec}, 但實際安裝為 ${ver}, 請先 npm i`)
+    }
+
+    //rollup: 入口為 worker, 若其有相對 import(如 6.13.0 前之 shared)會被併入; 其依賴無 bare module, 故無須任何 plugin
     let bundle = await rollup({
         input: fpEntry,
         onwarn: () => {}, //maplibre 產物之 circular/eval 類警告非本專案可處置, 不輸出以免淹沒
@@ -63,7 +82,7 @@ async function gDistRollupMaplibreGlWorker() {
     c += ` * maplibreWorkerInline.mjs\n`
     c += ` * maplibre-gl 之 worker 自足打包內嵌字串(機器產製, 請勿手改)\n`
     c += ` *\n`
-    c += ` * 來源: ${fpEntry}(含其相對 import 之 maplibre-gl-shared.mjs)\n`
+    c += ` * 來源: ${fpEntry}(已打包為無外部 import 之自足單檔)\n`
     c += ` * 產製: node toolg/gDistRollupMaplibreGlWorker.mjs\n`
     c += ` * maplibre-gl 版本: ${ver}\n`
     c += ` *\n`
