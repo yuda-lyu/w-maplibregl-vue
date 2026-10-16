@@ -270,7 +270,7 @@
         <td>String</td>
         <td><code>詳見程式碼</code></td>
         <td>No</td>
-        <td>輸入第i個底圖的圖磚或服務連結字串，支援{s}(子網域a/b/c)、{z}/{x}/{y}、//(自動補https)</td>
+        <td>輸入第i個底圖的連結字串，依type而異：raster為圖磚網址樣板，支援{s}(子網域a/b/c)、{z}/{x}/{y}、//(自動補https)，maplibre原生之{quadkey}、{bbox-epsg-3857}等佔位符原樣支援；wms為服務端點(自動附加GetMap參數)；vector為TileJSON網址(支援//自動補https，不支援圖磚樣板與{s})；style為MapLibre style JSON網址。url非有效字串之條目會被略過(console.warn)且不影響其他條目</td>
     </tr><tr>
         <td><code>opt.panelBaseMaps.baseMaps[i].type</code></td>
         <td>String</td>
@@ -314,6 +314,18 @@
         <td>No</td>
         <td>輸入第i個底圖(type為wms時)的LAYERS參數字串，預設''</td>
     </tr><tr>
+        <td><code>opt.panelBaseMaps.baseMaps[i].maxzoom</code></td>
+        <td>Number</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入第i個底圖(type為raster、wms、vector時)的圖磚來源最大層級整數，即服務實際提供圖磚之最深「圖磚層級」(非地圖顯示層級：256px圖磚於地圖層級z時約請求z+1級)，超過時改以該級圖磚放大顯示，避免請求不存在之層級致圖層空白並報錯，可給數字或數字字串，小數無條件捨去，負數、非有限數或非數值視為未給，不給則沿用maplibre預設(raster與wms為22，vector依其TileJSON)，vector僅宜往內限縮TileJSON之範圍(大於TileJSON者會請求不存在之層級)，type為'style'時不適用(由style JSON自帶)，預設null</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.baseMaps[i].minzoom</code></td>
+        <td>Number</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入第i個底圖(type為raster、wms、vector時)的圖磚來源最小層級整數，需求之圖磚層級低於此值時不請求圖磚且該處不顯示(地圖俯視或開啟地形時，遠景低於此層級之區域亦不顯示)，給法同maxzoom但小數無條件進位，須不大於服務最大層級，與maxzoom同時給且大於maxzoom時忽略minzoom，不給則沿用maplibre預設(raster與wms為0，vector依其TileJSON)，type為'style'時不適用，預設null</td>
+    </tr><tr>
         <td><code>opt.panelBaseMaps.baseMaps[i].colorFillExtrusion</code></td>
         <td>String</td>
         <td><code>null</code></td>
@@ -355,6 +367,54 @@
         <td><code>false</code></td>
         <td>No</td>
         <td>輸入底圖選擇區當過高出現垂直捲軸時，是否可接收捲軸布林值，預設false</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap</code></td>
+        <td>Object</td>
+        <td><code>詳見程式碼</code></td>
+        <td>No</td>
+        <td>輸入3D地形設定物件，不給則使用程式碼的defTerrainMap(遠端DEM)，給物件即整組取代預設(未給之欄位不繼承預設，例如只給exaggeration則無地形)，給{}則不套用地形，預設值詳見程式碼的defTerrainMap</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.url</code></td>
+        <td>String</td>
+        <td>-</td>
+        <td>No</td>
+        <td>輸入地形DEM圖磚網址樣板字串，支援{z}/{x}/{y}、//(自動補https)，未給則不套用地形(陰影亦不套用)</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.encoding</code></td>
+        <td>String</td>
+        <td><code>'terrarium'</code></td>
+        <td>No</td>
+        <td>輸入地形DEM編碼字串，可選'terrarium'、'mapbox'，預設'terrarium'</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.tileSize</code></td>
+        <td>Number</td>
+        <td><code>256</code></td>
+        <td>No</td>
+        <td>輸入地形DEM圖磚尺寸數字，單位px，預設256</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.maxzoom</code></td>
+        <td>Number</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入地形DEM圖磚來源最大層級整數，給法同baseMaps[i].maxzoom，預設null(defTerrainMap給13)</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.exaggeration</code></td>
+        <td>Number</td>
+        <td><code>1.5</code></td>
+        <td>No</td>
+        <td>輸入地形高度誇張倍率數字，預設1.5</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.hillshadeSource</code></td>
+        <td>Object</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入陰影DEM來源設定物件，欄位同terrainSource(url、encoding、tileSize、maxzoom)，須同時給有效之terrainSource才生效，url與terrainSource.url相同時共用地形來源(encoding、tileSize、maxzoom以terrainSource為準)，不給則不顯示陰影，預設null</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.hillshadeExaggeration</code></td>
+        <td>Number</td>
+        <td><code>0.5</code></td>
+        <td>No</td>
+        <td>輸入陰影強度數字，預設0.5</td>
     </tr><tr>
         <td><code>opt.panelLabels.show</code></td>
         <td>Boolean</td>
@@ -1371,7 +1431,7 @@
         <td>String</td>
         <td><code>詳見程式碼</code></td>
         <td>No</td>
-        <td>輸入第i個底圖的圖磚或服務連結字串，支援{s}(子網域a/b/c)、{z}/{x}/{y}、//(自動補https)</td>
+        <td>輸入第i個底圖的連結字串，依type而異：raster為圖磚網址樣板，支援{s}(子網域a/b/c)、{z}/{x}/{y}、//(自動補https)，maplibre原生之{quadkey}、{bbox-epsg-3857}等佔位符原樣支援；wms為服務端點(自動附加GetMap參數)；vector為TileJSON網址(支援//自動補https，不支援圖磚樣板與{s})；style為MapLibre style JSON網址。url非有效字串之條目會被略過(console.warn)且不影響其他條目</td>
     </tr><tr>
         <td><code>opt.panelBaseMaps.baseMaps[i].type</code></td>
         <td>String</td>
@@ -1415,6 +1475,18 @@
         <td>No</td>
         <td>輸入第i個底圖(type為wms時)的LAYERS參數字串，預設''</td>
     </tr><tr>
+        <td><code>opt.panelBaseMaps.baseMaps[i].maxzoom</code></td>
+        <td>Number</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入第i個底圖(type為raster、wms、vector時)的圖磚來源最大層級整數，即服務實際提供圖磚之最深「圖磚層級」(非地圖顯示層級：256px圖磚於地圖層級z時約請求z+1級)，超過時改以該級圖磚放大顯示，避免請求不存在之層級致圖層空白並報錯，可給數字或數字字串，小數無條件捨去，負數、非有限數或非數值視為未給，不給則沿用maplibre預設(raster與wms為22，vector依其TileJSON)，vector僅宜往內限縮TileJSON之範圍(大於TileJSON者會請求不存在之層級)，type為'style'時不適用(由style JSON自帶)，預設null</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.baseMaps[i].minzoom</code></td>
+        <td>Number</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入第i個底圖(type為raster、wms、vector時)的圖磚來源最小層級整數，需求之圖磚層級低於此值時不請求圖磚且該處不顯示(地圖俯視或開啟地形時，遠景低於此層級之區域亦不顯示)，給法同maxzoom但小數無條件進位，須不大於服務最大層級，與maxzoom同時給且大於maxzoom時忽略minzoom，不給則沿用maplibre預設(raster與wms為0，vector依其TileJSON)，type為'style'時不適用，預設null</td>
+    </tr><tr>
         <td><code>opt.panelBaseMaps.baseMaps[i].colorFillExtrusion</code></td>
         <td>String</td>
         <td><code>null</code></td>
@@ -1456,6 +1528,54 @@
         <td><code>false</code></td>
         <td>No</td>
         <td>輸入底圖選擇區當過高出現垂直捲軸時，是否可接收捲軸布林值，預設false</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap</code></td>
+        <td>Object</td>
+        <td><code>詳見程式碼</code></td>
+        <td>No</td>
+        <td>輸入3D地形設定物件，不給則使用程式碼的defTerrainMap(遠端DEM)，給物件即整組取代預設(未給之欄位不繼承預設，例如只給exaggeration則無地形)，給{}則不套用地形，預設值詳見程式碼的defTerrainMap</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.url</code></td>
+        <td>String</td>
+        <td>-</td>
+        <td>No</td>
+        <td>輸入地形DEM圖磚網址樣板字串，支援{z}/{x}/{y}、//(自動補https)，未給則不套用地形(陰影亦不套用)</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.encoding</code></td>
+        <td>String</td>
+        <td><code>'terrarium'</code></td>
+        <td>No</td>
+        <td>輸入地形DEM編碼字串，可選'terrarium'、'mapbox'，預設'terrarium'</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.tileSize</code></td>
+        <td>Number</td>
+        <td><code>256</code></td>
+        <td>No</td>
+        <td>輸入地形DEM圖磚尺寸數字，單位px，預設256</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.terrainSource.maxzoom</code></td>
+        <td>Number</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入地形DEM圖磚來源最大層級整數，給法同baseMaps[i].maxzoom，預設null(defTerrainMap給13)</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.exaggeration</code></td>
+        <td>Number</td>
+        <td><code>1.5</code></td>
+        <td>No</td>
+        <td>輸入地形高度誇張倍率數字，預設1.5</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.hillshadeSource</code></td>
+        <td>Object</td>
+        <td><code>null</code></td>
+        <td>No</td>
+        <td>輸入陰影DEM來源設定物件，欄位同terrainSource(url、encoding、tileSize、maxzoom)，須同時給有效之terrainSource才生效，url與terrainSource.url相同時共用地形來源(encoding、tileSize、maxzoom以terrainSource為準)，不給則不顯示陰影，預設null</td>
+    </tr><tr>
+        <td><code>opt.panelBaseMaps.terrainMap.hillshadeExaggeration</code></td>
+        <td>Number</td>
+        <td><code>0.5</code></td>
+        <td>No</td>
+        <td>輸入陰影強度數字，預設0.5</td>
     </tr><tr>
         <td><code>opt.panelLabels.show</code></td>
         <td>Boolean</td>
@@ -2351,7 +2471,7 @@
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Sun Oct 11 2026 16:02:02 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Fri Oct 16 2026 13:23:54 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>
