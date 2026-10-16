@@ -40,6 +40,25 @@ function assignSourceZoomRange(spec, cfg, label, useMin = true) {
 }
 
 
+/**
+ * 疊加層(colorShade 空字串)透明度之單一擁有者(R14): 預設值與值域只在此決定, 渲染(vector/raster 建立與 paint 更新)與面板一律呼叫之。
+ * bm.opacity 為數字或數字字串 → 夾在 0~1 之有限數(0 有效); 非數值/非有限(NaN、±Infinity、'abc'、布林、陣列…)視為未給 → vector 預設 0.8、其餘(raster/wms)預設 1;
+ * type 為 'style' 不支援整組透明度(各層自帶 opacity, 常為 zoom 表達式) → 回 null
+ * @param {Object} bm - 底圖條目
+ * @returns {Number|null}
+ */
+export function getBaseMapOpacity(bm) {
+    let type = get(bm, 'type', '')
+    if (type === 'style') return null
+    let def = type === 'vector' ? 0.8 : 1
+    let v = get(bm, 'opacity', null)
+    if (!isnum(v)) return def
+    v = Number(v)
+    if (!Number.isFinite(v)) return def
+    return Math.min(Math.max(v, 0), 1)
+}
+
+
 // fill-extrusion 建物色: 帶 colorFillExtrusion 則統一上色, 否則回退資料 colour 屬性(向後相容)
 function fxColorExpr(bm) {
     return bm.colorFillExtrusion || ['coalesce', ['get', 'colour'], '#aaaaaa']
@@ -168,7 +187,7 @@ export function applyBaseMaps(map, baseMaps) {
             map.addSource(srcId, assignSourceZoomRange({ type: 'vector', url: u }, bm, `baseMaps[${k}]`)) //明給之 minzoom/maxzoom 優先於 TileJSON
             let layerType = bm.layerType || 'fill'
             let sourceLayer = bm.layer || ''
-            let op = bm.opacity != null ? bm.opacity : 0.8
+            let op = getBaseMapOpacity(bm)
             let paint = {}
             if (layerType === 'fill-extrusion') {
                 paint = {
@@ -202,7 +221,7 @@ export function applyBaseMaps(map, baseMaps) {
             tiles = u.includes('{s}') ? ['a', 'b', 'c'].map((s) => u.replace('{s}', s)) : [u]
             tiles = tiles.map((t) => t.startsWith('//') ? 'https:' + t : t)
         }
-        let op = bm.opacity != null ? bm.opacity : 1
+        let op = getBaseMapOpacity(bm)
         //maxzoom(選填): 服務之最大圖磚層級, 超出時以該級圖磚放大顯示; 未給時 256px 圖磚於地圖層級 z 請求 round(z+1) 級, 服務沒有即空白並報錯
         map.addSource(srcId, assignSourceZoomRange({ type: 'raster', tiles, tileSize: 256 }, bm, `baseMaps[${k}]`))
         map.addLayer({ id: layerId, type: 'raster', source: srcId, paint: { 'raster-opacity': op, 'raster-opacity-transition': { duration: 0, delay: 0 } }, layout: { visibility: bm.visible ? 'visible' : 'none' } })
@@ -375,7 +394,7 @@ export function updateBaseMapPaint(map, baseMaps, idx) {
     if (!map.getLayer(layerId)) return
     if (bm.type === 'vector') {
         let lt = bm.layerType || 'fill'
-        let op = bm.opacity != null ? bm.opacity : 0.8
+        let op = getBaseMapOpacity(bm)
         if (lt === 'fill-extrusion') {
             map.setPaintProperty(layerId, 'fill-extrusion-color', fxColorExpr(bm))
             map.setPaintProperty(layerId, 'fill-extrusion-opacity', op)
@@ -388,7 +407,7 @@ export function updateBaseMapPaint(map, baseMaps, idx) {
         }
     }
     else {
-        let op = bm.opacity != null ? bm.opacity : 1
+        let op = getBaseMapOpacity(bm)
         map.setPaintProperty(layerId, 'raster-opacity', op)
     }
 }

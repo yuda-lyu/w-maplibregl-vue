@@ -64,6 +64,8 @@
 
             <AppBSCRuntimeSync v-if="showSubCmp==='runtimeSync'"></AppBSCRuntimeSync>
 
+            <AppBSCZoomRange v-if="showSubCmp==='zoomRange'"></AppBSCZoomRange>
+
             <AppPopupPosition v-if="showSubCmp==='popupPosition'"></AppPopupPosition>
 
             <AppPopupResize v-if="showSubCmp==='popupResize'"></AppPopupResize>
@@ -83,6 +85,8 @@
             <AppPBMColorFillExtrusion v-if="showSubCmp==='baseMap.colorFillExtrusion'"></AppPBMColorFillExtrusion>
 
             <AppPBMMaxzoom v-if="showSubCmp==='baseMap.maxzoom'"></AppPBMMaxzoom>
+
+            <AppPBMOpacity v-if="showSubCmp==='baseMap.opacity'"></AppPBMOpacity>
 
             <AppPSCShow v-if="showSubCmp==='panelScale.show'"></AppPSCShow>
 
@@ -299,6 +303,7 @@ import AppBSCPanelBackgroundColor from './AppBSCPanelBackgroundColor.vue'
 import AppBSCDisplayOrderByType from './AppBSCDisplayOrderByType.vue'
 import AppBSCHoverInteractions from './AppBSCHoverInteractions.vue'
 import AppBSCRuntimeSync from './AppBSCRuntimeSync.vue'
+import AppBSCZoomRange from './AppBSCZoomRange.vue'
 import AppPopupPosition from './AppPopupPosition.vue'
 import AppPopupResize from './AppPopupResize.vue'
 import AppPBMShow from './AppPBMShow.vue'
@@ -309,6 +314,7 @@ import AppPBMMaxWidth from './AppPBMMaxWidth.vue'
 import AppPBMMaxHeight from './AppPBMMaxHeight.vue'
 import AppPBMColorFillExtrusion from './AppPBMColorFillExtrusion.vue'
 import AppPBMMaxzoom from './AppPBMMaxzoom.vue'
+import AppPBMOpacity from './AppPBMOpacity.vue'
 import AppPSCShow from './AppPSCShow.vue'
 import AppPSCPosition from './AppPSCPosition.vue'
 import AppPCRShow from './AppPCRShow.vue'
@@ -420,6 +426,7 @@ export default {
         AppBSCDisplayOrderByType,
         AppBSCHoverInteractions,
         AppBSCRuntimeSync,
+        AppBSCZoomRange,
         AppPopupPosition,
         AppPopupResize,
         AppPBMShow,
@@ -430,6 +437,7 @@ export default {
         AppPBMMaxHeight,
         AppPBMColorFillExtrusion,
         AppPBMMaxzoom,
+        AppPBMOpacity,
         AppPSCShow,
         AppPSCPosition,
         AppPCRShow,
@@ -544,6 +552,7 @@ export default {
                     'displayOrderByType',
                     'hoverInteractions',
                     'runtimeSync',
+                    'zoomRange',
                 ],
                 panelBaseMaps: [
                     'panelBaseMaps.show',
@@ -554,6 +563,7 @@ export default {
                     'panelBaseMaps.maxHeight',
                     'baseMap.colorFillExtrusion',
                     'baseMap.maxzoom',
+                    'baseMap.opacity',
                 ],
                 panelScale: [
                     'panelScale.show',

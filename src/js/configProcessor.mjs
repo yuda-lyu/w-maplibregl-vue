@@ -201,24 +201,63 @@ export function computeClusterOpts(opt) {
 }
 
 
+//圖台縮放範圍預設: 0~22(maxZoom 同 maplibre 預設; minZoom 0=整個世界於 512px 圖磚恰為一幅; maplibre 6.14.0 實作之 minZoom 預設為 -2〔文件寫 0〕, 故由本套件明給)
+export const DEF_MIN_ZOOM = 0
+export const DEF_MAX_ZOOM = 22
+const LIM_ZOOM = 24 //maplibre MapOptions 之合法上限
+
+function toZoomLimit(v) {
+    if (!isnum(v)) return null
+    v = Number(v)
+    if (!Number.isFinite(v)) return null
+    return Math.min(Math.max(v, 0), LIM_ZOOM)
+}
+
 /**
- * 計算基本 opt 設定（zoom, center, panelBackgroundColor 等）
+ * 正規化圖台縮放範圍(opt.minZoom、opt.maxZoom): 數字或數字字串依數值; 非數值/非有限視為未給用預設(0、22); 夾在 0~24;
+ * minZoom 大於 maxZoom 時忽略 minZoom(ignoredMin=true, 由呼叫端警告一次; 同圖磚 minzoom/maxzoom 之作法, maxZoom 為保護性欄位)。
+ * 範圍只交給地圖把關(R11), 元件側不另夾 opt.zoom
+ * @param {Object} opt
+ * @returns {{ minZoom: Number, maxZoom: Number, ignoredMin: Boolean }}
+ */
+export function computeZoomRange(opt) {
+    let mn = toZoomLimit(get(opt, 'minZoom', null))
+    let mx = toZoomLimit(get(opt, 'maxZoom', null))
+    let minZoom = mn === null ? DEF_MIN_ZOOM : mn
+    let maxZoom = mx === null ? DEF_MAX_ZOOM : mx
+    let ignoredMin = false
+    if (minZoom > maxZoom) {
+        ignoredMin = true
+        minZoom = Math.min(DEF_MIN_ZOOM, maxZoom)
+    }
+    return { minZoom, maxZoom, ignoredMin }
+}
+
+//center 合法: 兩值皆為有限數且緯度在 ±90 內(經度不限, maplibre 會 wrap); isNumber 對 NaN 為 true, 故須另驗有限
+function isValidCenter(c) {
+    return isarr(c) && size(c) === 2 && isNumber(c[0]) && isNumber(c[1]) && Number.isFinite(c[0]) && Number.isFinite(c[1]) && Math.abs(c[0]) <= 90
+}
+
+/**
+ * 計算基本 opt 設定（zoom, minZoom, maxZoom, center, panelBackgroundColor 等）。對任何輸入皆回合法值且不拋錯(R13)
  * @param {Object} opt
  * @param {Number} currentZoom
  * @param {Array} currentCenter
- * @returns {{ zoom, center, panelBackgroundColor, displayPopupOnlyone, displayOrderByType, popupPosition, tooltipPosition, projection }}
+ * @returns {{ zoom, minZoom, maxZoom, ignoredMin, center, panelBackgroundColor, displayPopupOnlyone, displayOrderByType, popupPosition, tooltipPosition, projection }}
  */
 export function computeBasicOpt(opt, currentZoom, currentCenter) {
     let pbc = get(opt, 'panelBackgroundColor', null)
     if (!isstr(pbc)) pbc = 'rgba(255,255,255,0.95)'
 
+    let zr = computeZoomRange(opt)
+
+    //zoom 不在此夾值: 層級範圍只由地圖之 minZoom/maxZoom 把關(地圖實際可達層級另受投影影響, 如 globe 之下限隨緯度而略低於 minZoom,
+    //元件側另夾一次必與地圖實際值不一致而拉回); 超出範圍之值交 map.setZoom/jumpTo, 由 changeOpt 以地圖實際值回寫
     let zoom = get(opt, 'zoom', null)
-    if (!isnum(zoom)) zoom = 6
-    zoom = Math.min(Math.max(zoom, 1), 18)
+    zoom = isnum(zoom) ? Number(zoom) : 6
 
     let center = get(opt, 'center', null)
-    let ck = isarr(center) && size(center) === 2 && isNumber(center[0]) && isNumber(center[1])
-    if (!ck) center = [23.5, 121.1]
+    if (!isValidCenter(center)) center = [23.5, 121.1]
     center = cloneDeep(center)
 
     let displayPopupOnlyone = get(opt, 'displayPopupOnlyone', null)
@@ -236,5 +275,5 @@ export function computeBasicOpt(opt, currentZoom, currentCenter) {
     let projection = get(opt, 'projection', null)
     if (!isstr(projection) || !['globe', 'mercator'].includes(projection)) projection = ''
 
-    return { zoom, center, panelBackgroundColor: pbc, displayPopupOnlyone, displayOrderByType, popupPosition, tooltipPosition, projection }
+    return { zoom, minZoom: zr.minZoom, maxZoom: zr.maxZoom, ignoredMin: zr.ignoredMin, center, panelBackgroundColor: pbc, displayPopupOnlyone, displayOrderByType, popupPosition, tooltipPosition, projection }
 }

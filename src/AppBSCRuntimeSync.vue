@@ -119,6 +119,7 @@ export default {
             let m = vo.$refs.wm.getMapObject()
             return m ? m.getStyle() : null
         }
+        window.__getMap = () => vo.$refs.wm.getMapObject() //e2e 讀地圖層級與是否移動中用(公開 API, 僅讀)
     },
     methods: {
         //交換兩張帶 key 影像的陣列順序(reverse 為 Vue 2 攔截之變異方法, 觸發 deep watcher)

@@ -8,10 +8,12 @@
 //   J-url  baseMaps[i].url: 「url非有效字串之條目會被略過(console.warn)且不影響其他條目」
 //   J-tm   terrainMap.terrainSource.maxzoom: 「給法同baseMaps[i].maxzoom」; terrainSource 無 minzoom 欄位;
 //          hillshadeSource: 「須同時給有效之terrainSource才生效, url與terrainSource.url相同時共用地形來源」
-//   J-def  CLAUDE_rulebook.md R9: 預設底圖 OpenTopoMap 帶 maxzoom 17(服務只提供至 17 級)
+//   J-def  CLAUDE_rulebook.md R9: 預設底圖 OpenTopoMap 帶 maxzoom 17(服務只提供至 17 級); OpenStreetMap 帶 maxzoom 19(z>=20 回 400)、Mapbox 帶 maxzoom 22(TileJSON 宣告)
+//   J-opa  baseMaps[i].opacity: 「透明度數字(0~1), 可給數字或數字字串, 超出範圍夾限, 非數值視為未給, raster與wms預設1、vector預設0.8(面板滑桿與實繪一致),
+//          type為'style'時不支援(各層自帶opacity)」(CLAUDE_rulebook.md R14)
 //   J-diff isBaseMapsPaintOnlyDiff/isBaseMapsStructuralDiff 之函式說明(僅 paint → P1; 僅順序/可見性/paint → 增量; 其餘 → 完整重建)
 import assert from 'assert'
-import { applyBaseMaps, applyTerrain, preloadBaseMapStyles, isBaseMapsStructuralDiff, isBaseMapsPaintOnlyDiff } from '../src/js/basemapManager.mjs'
+import { applyBaseMaps, applyTerrain, preloadBaseMapStyles, isBaseMapsStructuralDiff, isBaseMapsPaintOnlyDiff, getBaseMapOpacity, updateBaseMapPaint } from '../src/js/basemapManager.mjs'
 import defBaseMaps from '../src/js/defBaseMaps.mjs'
 
 
@@ -39,6 +41,10 @@ function genMap() {
             if (i >= 0) layers.splice(i, 1)
         },
         setTerrain: () => {},
+        paints: [],
+        setPaintProperty(id, prop, val) {
+            this.paints.push({ id, prop, val })
+        },
     }
 }
 
@@ -222,6 +228,80 @@ describe('unit-basemapManager', function() {
         assert.strictEqual(specs.length, 1) //J-url: 不影響其他條目(有效條目照常建立), 無效條目不建 source
         assert.deepStrictEqual(specs[0].tiles, [URL_R]) //J-url: 同上
         assert.strictEqual(msgs.filter((m) => m.includes('url')).length, 3, JSON.stringify(msgs)) //J-url: 各無效條目皆 console.warn
+    })
+
+    it('U27 預設底圖 OpenStreetMap 帶 maxzoom 19、Mapbox 帶 maxzoom 22, 且套用至 source', function() {
+        let osm = defBaseMaps.find((bm) => bm.name === 'OpenStreetMap')
+        assert.ok(osm, 'defBaseMaps 應含 OpenStreetMap')
+        assert.strictEqual(osm.maxzoom, 19) //J-def: OSM 帶 maxzoom 19(z>=20 回 400 且無 CORS 標頭, 圖台上限放寬至 22 後不補即空白)
+        assert.strictEqual(specOf({ ...osm }).maxzoom, 19) //J-def→J-max: 套用至 source
+        let mb = defBaseMaps.find((bm) => bm.name === 'Mapbox')
+        assert.ok(mb, 'defBaseMaps 應含 Mapbox')
+        assert.strictEqual(mb.maxzoom, 22) //J-def: Mapbox 帶 maxzoom 22(TileJSON 宣告)
+        assert.strictEqual(specOf({ ...mb }).maxzoom, 22) //J-def→J-max: 套用至 source
+    })
+
+    it('U28 getBaseMapOpacity: 預設(raster/wms 1、vector 0.8)、數字字串、夾限、無效值視為未給、style 不支援', function() {
+        //J-opa: raster與wms預設1、vector預設0.8
+        assert.strictEqual(getBaseMapOpacity({}), 1)
+        assert.strictEqual(getBaseMapOpacity({ type: 'raster' }), 1)
+        assert.strictEqual(getBaseMapOpacity({ type: 'wms' }), 1)
+        assert.strictEqual(getBaseMapOpacity({ type: 'vector' }), 0.8)
+        //J-opa: 明給之數字(含 0 為有效值、不可視為未給)
+        assert.strictEqual(getBaseMapOpacity({ opacity: 0 }), 0)
+        assert.strictEqual(getBaseMapOpacity({ type: 'vector', opacity: 0 }), 0)
+        assert.strictEqual(getBaseMapOpacity({ opacity: 0.3 }), 0.3)
+        assert.strictEqual(getBaseMapOpacity({ type: 'vector', opacity: 1 }), 1)
+        //J-opa: 可給數字字串
+        assert.strictEqual(getBaseMapOpacity({ opacity: '0.5' }), 0.5)
+        assert.strictEqual(getBaseMapOpacity({ type: 'vector', opacity: ' 0.25 ' }), 0.25)
+        //J-opa: 超出範圍夾限
+        assert.strictEqual(getBaseMapOpacity({ opacity: 1.5 }), 1)
+        assert.strictEqual(getBaseMapOpacity({ opacity: -0.2 }), 0)
+        assert.strictEqual(getBaseMapOpacity({ type: 'vector', opacity: '7' }), 1)
+        //J-opa: 非數值/非有限視為未給(用型別預設)
+        for (let bad of [NaN, Infinity, -Infinity, 'abc', '', ' ', null, undefined, true, false, [], [0.5], {}]) {
+            assert.strictEqual(getBaseMapOpacity({ opacity: bad }), 1, `raster 輸入 ${String(bad)}`)
+            assert.strictEqual(getBaseMapOpacity({ type: 'vector', opacity: bad }), 0.8, `vector 輸入 ${String(bad)}`)
+        }
+        //J-opa: type為'style'時不支援(回 null)
+        assert.strictEqual(getBaseMapOpacity({ type: 'style' }), null)
+        assert.strictEqual(getBaseMapOpacity({ type: 'style', opacity: 0.5 }), null)
+        //bm 缺: 不拋錯(回 raster 預設)
+        assert.strictEqual(getBaseMapOpacity(null), 1)
+    })
+
+    it('U29 疊加層 opacity: 建立與 paint 更新之 4 個渲染站點取得之值 = getBaseMapOpacity', function() {
+        //J-opa: 面板滑桿與實繪一致 → 渲染端(vector 建立/更新、raster 建立/更新)與面板同走 getBaseMapOpacity
+        let ins = [undefined, 0, 0.5, '0.5', 1.5, -0.2, NaN, 'abc']
+        let kinds = [
+            { label: 'raster', bm: (o) => raster({ opacity: o }), prop: 'raster-opacity' },
+            { label: 'wms', bm: (o) => wms({ opacity: o }), prop: 'raster-opacity' },
+            { label: 'vector fill', bm: (o) => vector({ layerType: 'fill', opacity: o }), prop: 'fill-opacity' },
+            { label: 'vector line', bm: (o) => vector({ layerType: 'line', opacity: o }), prop: 'line-opacity' },
+            { label: 'vector fill-extrusion', bm: (o) => vector({ layerType: 'fill-extrusion', opacity: o }), prop: 'fill-extrusion-opacity' },
+        ]
+        for (let k of kinds) {
+            for (let o of ins) {
+                let bm = k.bm(o)
+                let want = getBaseMapOpacity(bm)
+                let map = genMap()
+                applyBaseMaps(map, [bm])
+                assert.strictEqual(map.layers.length, 1, `${k.label} opacity=${String(o)} 應建立圖層`)
+                assert.strictEqual(map.layers[0].paint[k.prop], want, `${k.label} 建立 opacity=${String(o)}`) //建立站點
+                updateBaseMapPaint(map, [bm], 0)
+                let ps = map.paints.filter((p) => p.prop === k.prop)
+                assert.strictEqual(ps.length, 1, `${k.label} 更新 opacity=${String(o)} 應設 ${k.prop}`)
+                assert.strictEqual(ps[0].val, want, `${k.label} 更新 opacity=${String(o)}`) //更新站點
+            }
+        }
+        //明確期望值(不僅與 getBaseMapOpacity 自洽): 無效值不得使圖層消失或帶無效 paint
+        let m1 = genMap(); applyBaseMaps(m1, [raster({ opacity: '0.5' })])
+        assert.strictEqual(m1.layers[0].paint['raster-opacity'], 0.5)
+        let m2 = genMap(); applyBaseMaps(m2, [vector({ layerType: 'fill', opacity: undefined })])
+        assert.strictEqual(m2.layers[0].paint['fill-opacity'], 0.8)
+        let m3 = genMap(); applyBaseMaps(m3, [raster({ opacity: 1.5 })])
+        assert.strictEqual(m3.layers[0].paint['raster-opacity'], 1)
     })
 
 })

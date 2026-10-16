@@ -13,6 +13,7 @@ let defBaseMaps = [
         colorShade: 'dark',
         opacity: 1,
         visible: true,
+        maxzoom: 22, //對齊 TileJSON(api.mapbox.com/v4/mapbox.satellite.json)宣告之 maxzoom:22, 不依賴「超出宣告仍回 200」之未載明行為
     },
     {
         name: 'OpenStreetMap',
@@ -21,6 +22,7 @@ let defBaseMaps = [
         colorShade: 'light',
         opacity: 1,
         visible: false,
+        maxzoom: 19, //服務只提供至 19 級(20 級起回 400 且無 CORS 標頭), 圖台可放大至 22 級, 超出改以 19 級放大顯示
     },
     {
         name: 'OpenTopoMap',

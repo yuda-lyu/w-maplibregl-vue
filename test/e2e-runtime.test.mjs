@@ -233,13 +233,31 @@ describe('e2e-runtime', function() {
         assert.strictEqual(t, 'checkbox', `colorShade 省略之項目應為 checkbox(疊加層), 實際為 ${t}`)
     })
 
-    it('E2E-005 赤道比例尺: center 緯度 0 時比例尺依緯度 0 計算(zoom 10 → 12 km)', async function() {
+    it('E2E-005 赤道比例尺: center 緯度 0 時比例尺依緯度 0 計算(zoom 10 → 6 km, 放大兩級 zoom 12 → 2 km)', async function() {
         await gotoExample()
-        //spec: 比例尺依「當前中心緯度」計算; 緯度 0 為有效值不得回退預設緯度
-        //zoom 10 緯度 0: 156543.03392*cos(0)/2^10*80 = 12229.9m → '12 km'(回退 23.5 度時誤為 '11 km')
-        await waitUntilExist(page, '比例尺顯示 12 km', () => {
+        //spec: 比例尺依「當前中心緯度」計算; 緯度 0 為有效值不得回退預設緯度; 比例尺文字為 80px 對應之實際地面距離(CLAUDE_rulebook.md R15)
+        //zoom 10 緯度 0: maplibre 世界為 512px → 78271.51696*cos(0)/2^10*80 = 6114.9m → '6 km'。
+        //(原期望值為 '12 km', 係舊常數 156543.03392〔256px 世界, 2× 錯誤值〕所致之現狀指紋; 2026-10-16 隨 R15 修正為 '6 km', 實測 80px 之真實地面距離 ≈ 6.1 km)
+        await waitUntilExist(page, '比例尺顯示 6 km', () => {
             let el = document.querySelector('.clsScale')
-            return !!el && el.innerText.indexOf('12 km') >= 0
+            return !!el && el.innerText.trim() === '6 km'
+        })
+        //緯度 0 與回退預設緯度 23.5 之鑑別: zoom 10 時兩者取整後皆為 6 km 無法區分, 放大兩級至 zoom 12
+        //緯度 0: 78271.51696/2^12*80 = 1528.7m → '2 km'; 回退 23.5 度: 1401.6m → '1 km'
+        await page.locator('.clsZoomBtn').nth(0).click()
+        //等動畫結束(層級為 11 且地圖已停止; 比例尺文字取整, '3 km' 於 10.8 級即會出現, 不可當動畫完成條件)再點下一次, 免第二次點擊吃到動畫中途之目標層級
+        await waitUntilExist(page, '放大一級後層級 11 且地圖靜止', () => {
+            let m = window.__getMap()
+            return Math.abs(m.getZoom() - 11) < 1e-6 && !m.isMoving()
+        })
+        await page.locator('.clsZoomBtn').nth(0).click()
+        await waitUntilExist(page, '放大兩級後層級 12 且地圖靜止', () => {
+            let m = window.__getMap()
+            return Math.abs(m.getZoom() - 12) < 1e-6 && !m.isMoving()
+        })
+        await waitUntilExist(page, '放大兩級後比例尺顯示 2 km', () => {
+            let el = document.querySelector('.clsScale')
+            return !!el && el.innerText.trim() === '2 km'
         })
     })
 

@@ -85,6 +85,7 @@ export default {
             let m = vo.$refs.wm.getMapObject()
             return m ? m.getStyle() : null
         }
+        window.__getMap = () => vo.$refs.wm.getMapObject() //e2e 讀地圖層級用(公開 API, 僅讀)
     },
     beforeDestroy: function() {
         maplibregl.removeProtocol(PROTOCOL)

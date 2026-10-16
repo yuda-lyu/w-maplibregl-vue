@@ -2,12 +2,8 @@
  * mapCore.mjs
  * 地圖實例建立、投影管理
  */
-import get from 'lodash-es/get.js'
-import size from 'lodash-es/size.js'
-import isNumber from 'lodash-es/isNumber.js'
-import isarr from 'wsemi/src/isarr.mjs'
-import isnum from 'wsemi/src/isnum.mjs'
 import * as maplibregl from 'maplibre-gl' //maplibre-gl 6.x 起為 ESM-only 且移除 default export, 須以 namespace 方式匯入
+import { computeBasicOpt } from './configProcessor.mjs'
 import workerSource, { maplibreVersion } from './maplibreWorkerInline.mjs'
 
 
@@ -53,13 +49,9 @@ export function createMap(container, opt) {
     //須早於首次建立地圖(worker 於地圖初始化時即被取用)
     ensureWorkerUrl()
 
-    let center = get(opt, 'center', null)
-    let ck = isarr(center) && size(center) === 2 && isNumber(center[0]) && isNumber(center[1])
-    if (!ck) center = [23.5, 121.1]
-
-    let zoom = get(opt, 'zoom', null)
-    if (!isnum(zoom)) zoom = 6
-    zoom = Math.min(Math.max(zoom, 1), 18)
+    //center/zoom/縮放範圍之正規化只在 computeBasicOpt(R11、R13); 範圍由地圖把關, zoom 超出範圍者由 maplibre 建構時之 jumpTo 夾入
+    let basic = computeBasicOpt(opt)
+    if (basic.ignoredMin) console.warn(`[mapCore] opt.minZoom 大於 opt.maxZoom(有效 maxZoom=${basic.maxZoom}), 忽略 minZoom`)
 
     return new maplibregl.Map({
         container,
@@ -68,8 +60,10 @@ export function createMap(container, opt) {
             sources: {},
             layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f0f0f0' } }],
         },
-        center: [center[1], center[0]],
-        zoom,
+        center: [basic.center[1], basic.center[0]],
+        zoom: basic.zoom,
+        minZoom: basic.minZoom,
+        maxZoom: basic.maxZoom,
         attributionControl: false,
         antialias: true,
     })
@@ -95,5 +89,27 @@ export function applyProjection(map, projection) {
     }
     catch (e) {
         console.warn('[mapCore] setProjection error:', e)
+    }
+}
+
+
+/**
+ * 執行期變更圖台縮放範圍: maplibre 之 setMinZoom 拋錯當新 min 大於現行 max、setMaxZoom 拋錯當新 max 小於現行 min,
+ * 故先設不會與現行另一端衝突者; 範圍外之現行層級由 maplibre 自行拉入範圍(同步觸發 zoomend/moveend)
+ * @param {Object} map - MapLibre 地圖實例
+ * @param {{ minZoom: Number, maxZoom: Number }} next - computeZoomRange 之結果
+ */
+export function applyZoomRange(map, next) {
+    if (!map) return
+    try {
+        if (next.maxZoom >= map.getMinZoom()) {
+            map.setMaxZoom(next.maxZoom); map.setMinZoom(next.minZoom)
+        }
+        else {
+            map.setMinZoom(next.minZoom); map.setMaxZoom(next.maxZoom)
+        }
+    }
+    catch (e) {
+        console.warn('[mapCore] applyZoomRange error:', e)
     }
 }
