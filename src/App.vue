@@ -66,6 +66,8 @@
 
             <AppBSCZoomRange v-if="showSubCmp==='zoomRange'"></AppBSCZoomRange>
 
+            <AppBSCMoveState v-if="showSubCmp==='moveState'"></AppBSCMoveState>
+
             <AppPopupPosition v-if="showSubCmp==='popupPosition'"></AppPopupPosition>
 
             <AppPopupResize v-if="showSubCmp==='popupResize'"></AppPopupResize>
@@ -304,6 +306,7 @@ import AppBSCDisplayOrderByType from './AppBSCDisplayOrderByType.vue'
 import AppBSCHoverInteractions from './AppBSCHoverInteractions.vue'
 import AppBSCRuntimeSync from './AppBSCRuntimeSync.vue'
 import AppBSCZoomRange from './AppBSCZoomRange.vue'
+import AppBSCMoveState from './AppBSCMoveState.vue'
 import AppPopupPosition from './AppPopupPosition.vue'
 import AppPopupResize from './AppPopupResize.vue'
 import AppPBMShow from './AppPBMShow.vue'
@@ -427,6 +430,7 @@ export default {
         AppBSCHoverInteractions,
         AppBSCRuntimeSync,
         AppBSCZoomRange,
+        AppBSCMoveState,
         AppPopupPosition,
         AppPopupResize,
         AppPBMShow,
@@ -553,6 +557,7 @@ export default {
                     'hoverInteractions',
                     'runtimeSync',
                     'zoomRange',
+                    'moveState',
                 ],
                 panelBaseMaps: [
                     'panelBaseMaps.show',

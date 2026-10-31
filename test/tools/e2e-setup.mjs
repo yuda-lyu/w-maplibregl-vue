@@ -26,6 +26,7 @@ export async function startServer() {
         serverProc = spawn('npx', ['vue-cli-service', 'serve', '--port', String(PORT)], {
             cwd: process.cwd(),
             shell: true,
+            windowsHide: true, //不彈出主控台視窗
             stdio: ['ignore', 'pipe', 'pipe'],
         })
         let done = false

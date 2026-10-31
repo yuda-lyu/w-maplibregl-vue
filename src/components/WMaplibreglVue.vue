@@ -4,6 +4,7 @@
         v-domresize
         @domresize="resize"
         :loading="loading"
+        :state="state"
     >
 
         <!-- 圖台區 -->
@@ -405,6 +406,7 @@ import defBaseMaps from '../js/defBaseMaps.mjs'
 import defTerrainMap from '../js/defTerrainMap.mjs'
 import uiRes from '../uiRes.mjs'
 import { createMap, applyProjection as _applyProjection, applyZoomRange } from '../js/mapCore.mjs'
+import { createMoveState, MOVE_STATE_MOVING } from '../js/moveState.mjs'
 import { applyBaseMaps, preloadBaseMapStyles, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, getBaseMapOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
 import { clearTrackedByPrefix, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
@@ -449,6 +451,12 @@ function freezeCoordField(v) {
  *   - 響應式狀態（data / computed / watch）
  *   - 薄委派方法（調用模組函式 + 同步 Vue 狀態）
  *   - Vue 特定操作（$nextTick / $refs / $forceUpdate）
+ *
+ * 根節點 state 屬性（唯讀，圖台移動狀態，比照 w-component-vue WDrawer 之 state 語彙，供使用端與 e2e 偵測圖台是否已靜止，讀法如 this.$refs.wm.$el.getAttribute('state')，e2e 以 Playwright 等候根節點 [state="idle"] 即可，詳見 README）：
+ *   - 'moving'：移動中。初次載入完成（首次 idle）前亦為此值；其後自 maplibre 的 movestart 起至 idle 止，涵蓋 panTo/centerTo、easeTo、flyTo、jumpTo、zoomTo、縮放按鈕、滾輪縮放、拖曳、羅盤、容器尺寸改變(resize)與投影切換（opt.projection 變更、自動投影於層級8的切換、使用端經 getMapObject().setProjection 切換；投影切換可無相機移動，以 maplibre 的 projectiontransition 標記）；相機停止後仍等圖磚載入與繪製完成才轉為 idle，故此時 map.isMoving() 已為 false 而值仍可為 moving；靜止時收到滾輪事件即轉為 moving（搶在 movestart 之前，maplibre 滾輪縮放自首個 wheel 事件到 movestart 約有 40~80ms）。
+ *   - 'idle'：靜止。maplibre 的 idle 事件（相機不在移動，且目前請求之圖磚皆已載入、繪製完成）。此時 map.isMoving() 為 false 且 map.loaded() 為 true，畫面與中心、層級不再改變。
+ *   - 逾時後備：相機停止 3000ms 後仍未收到 idle（圖磚逾時未載完、繪製被暫停等）仍落定為 idle；靜止時滾輪事件後 600ms 內地圖未開始移動（如層級已達上下限）亦落定為 idle；逾時當下地圖仍在移動（長動畫、持續手勢）則續等。
+ *   - 只新增屬性，不改變既有外觀、行為與動畫；與 loading 屬性並存（loading 為 true 時才有該屬性，載入完成後移除）。
  *
  * @vue-prop {Object} opt 輸入資料設定物件
  * @vue-prop {Array} [opt.center=[23.5, 121.1]] 輸入地圖顯示中點陣列，陣列為WGS84[緯度,經度]，兩值皆須為有限數(數字字串視為非法)且緯度在±90內，否則視為未給(用預設)，預設[23.5, 121.1]
@@ -656,6 +664,7 @@ export default {
         return {
 
             loading: true,
+            state: MOVE_STATE_MOVING, //圖台移動狀態(根節點 state 屬性): 'moving' 移動中(含初次載入至首次 idle)、'idle' 靜止; 由 moveState.mjs 追蹤(非響應式實例屬性 moveState), 規則帳本 R16
 
             map: null,
             corners: ['topleft', 'topright', 'bottomleft', 'bottomright'],
@@ -796,6 +805,9 @@ export default {
         each(this.wats, (w) => {
             w()
         })
+        if (this.moveState) {
+            this.moveState.dispose(); this.moveState = null
+        }
         if (this.map) {
             this.map.remove(); this.map = null
         }
@@ -873,6 +885,11 @@ export default {
             vo.loading = true
             vo.$emit('loading', true)
             vo.map = createMap(vo.$refs.panel, vo.opt)
+            //圖台移動狀態追蹤(根節點 state 屬性, R16): 須早於下方 load/projectiontransition 處理器註冊(追蹤器的 load 計時、投影遷移標記先於元件自身處理)
+            vo.moveState = createMoveState(vo.map, (s) => {
+                vo.state = s
+            })
+            vo.state = vo.moveState.getState() //初值以追蹤器為準(moving)
             vo.currentZoom = vo.map.getZoom()
             vo.zoomRange = { minZoom: vo.map.getMinZoom(), maxZoom: vo.map.getMaxZoom() }
             //建圖後 opt.zoom(未給/非數值者為預設 6)與地圖實際層級不同(被地圖夾入範圍)時回寫實際層級, 使 opt.zoom 與地圖一致(R12-7);
@@ -969,7 +986,7 @@ export default {
         // ===== 投影 =====
 
         applyProjection() {
-            _applyProjection(this.map, this.projection)
+            _applyProjection(this.map, this.projection) //投影遷移期間之 moving 由 moveState 聽 projectiontransition 標記(R16)
         },
 
         // ===== 底圖 =====

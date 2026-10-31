@@ -58,6 +58,13 @@ import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 const MAP_CENTER = [24.0, 121.0] //[lat, lng]
 const MAP_ZOOM = 10
 
+// 視窗尺寸: 以視窗座標硬算目標位置, 高度須含範例頁版面變動(如子選單多換一行使 canvas 下移)之餘裕;
+// 下排目標約在 canvas 頂 + 377px, 760 時 HEAD 僅餘 17px, 與 e2e-zoomrange / e2e-movestate 一致取 1100
+const VIEWPORT = { width: 1000, height: 1100 }
+// 本檔各案最低之目標: 緯度 23.92(E2E-004/005/006/008/010/012/014/015 之下排目標), E2E-010 之 clipLine 另延伸至目標下方 12px
+const LOWEST_TARGET_LAT = 23.92
+const LOWEST_TARGET_BELOW_PX = 12
+
 // web mercator: latLng → canvas 內像素座標(projection='mercator', 無旋轉/傾斜時為精確解)
 function latLngToCanvasXY(lat, lng, canvasW, canvasH) {
     let worldSize = 512 * Math.pow(2, MAP_ZOOM)
@@ -85,7 +92,7 @@ describe('e2e-hover', function() {
     beforeEach(async function() {
         //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
         browser = await launchChromium({ headless: true })
-        let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
+        let ctx = await browser.newContext({ viewport: VIEWPORT })
         page = await ctx.newPage()
     })
     afterEach(async function() {
@@ -101,6 +108,12 @@ describe('e2e-hover', function() {
         await waitUntilExist(page, 'map canvas', () => !!document.querySelector('.maplibregl-canvas'))
         await page.waitForTimeout(3000) //等圖層(含非同步 icon/等值線)render + idle 就位
         cbb = await page.locator('.maplibregl-canvas').boundingBox()
+        //前置斷言: 最低目標(與 hoverAt 同一換算)須落在視窗內; 範例頁版面改變使目標出界時, 於此明確失敗,
+        //免淪為滑鼠落在視窗外致 cursor/tooltip 15 秒逾時或截圖 clip 越界之誤導訊息
+        let pLow = latLngToCanvasXY(LOWEST_TARGET_LAT, MAP_CENTER[1], cbb.width, cbb.height)
+        let lowY = cbb.y + pLow.y + LOWEST_TARGET_BELOW_PX
+        let vh = page.viewportSize().height
+        assert.ok(lowY <= vh, `目標落在視窗外:範例頁版面改變(最低目標 y=${Math.round(lowY)} > 視窗高 ${vh};canvas 頂 y=${Math.round(cbb.y)})`)
     }
     //滑鼠移到指定 latLng 對應之畫面位置(dx/dy 為額外像素偏移, 如 icon 點須落在錨點上方之圖示內)
     let hoverAt = async (lat, lng, dx = 0, dy = 0) => {
