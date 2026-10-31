@@ -1,0 +1,317 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh-tw">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui"
+    />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>example for AppBSCMoveState</title>
+
+    <!-- @babel/polyfill -->
+    <script
+        nomodule
+        src="https://cdn.jsdelivr.net/npm/@babel/polyfill/dist/polyfill.min.js"
+    ></script>
+
+    <!-- vue -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.min.js"></script>
+
+    <!-- extractHtml已自動添加@babel/polyfill與vue -->
+
+    <!-- maplibre-gl已包入 -->
+    <script
+        _src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.js"
+    ></script>
+    <link
+        rel="stylesheet"
+        _href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.20.0/dist/maplibre-gl.min.css"
+    />
+
+    <!-- w-maplibregl-vue -->
+    <script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.59/dist/w-maplibregl-vue.umd.js"></script>
+
+    <!-- lodash -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash/lodash.min.js"></script>
+
+    <!-- wsemi -->
+    <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.min.js"></script>
+
+    <!-- w-gis -->
+    <script _src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/w-gis.umd.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/interp2.wk.umd.js"
+    ></script>
+
+    <!-- data -->
+    <script src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRain.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRainClip.js"
+    ></script>
+
+    <!-- w-jsonview-tree -->
+    <script
+        src="https://cdn.jsdelivr.net/npm/w-jsonview-tree@latest/dist/w-jsonview-tree.umd.js"
+    ></script>
+    <script>
+  let jv = window["w-jsonview-tree"];
+    </script>
+
+    <style>
+  .item-link {
+    display: inline-block;
+    margin: 10px 10px 0px 0px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    color: #fff;
+    background-color: #443a65;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .bkh {
+    /* 寬 */
+    padding: 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkh {
+      padding: 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkh {
+      padding: 5px;
+    }
+  }
+  .bkp {
+    /* 寬 */
+    padding: 0px 20px;
+  }
+  @media screen and (max-width: 800px) {
+    /* 中 */
+    .bkp {
+      padding: 0px 10px;
+    }
+  }
+  @media screen and (max-width: 400px) {
+    /* 窄 */
+    .bkp {
+      padding: 0px 5px;
+    }
+  }
+    </style>
+</head>
+<body
+    style="font-family:'Microsoft JhengHei','Avenir','Helvetica'; padding:0px; margin:0px;"
+>
+    <div id="app" class="bkh" style>
+        <div>
+            <div style="padding-bottom:10px; font-size:0.85rem; color:#777;">
+                圖台移動狀態驗證頁(e2e 用): 元件根節點提供唯讀屬性
+                <b>state</b>，
+                <b>moving</b> 為移動中(初次載入至首次 idle、自 maplibre movestart 起至 idle 止，含 panTo/easeTo/flyTo/滾輪縮放/投影切換)，
+                <b>idle</b> 為靜止(相機停止且圖磚載入與繪製完成)；使用端與 e2e 等候根節點 [state="idle"] 即可，免輪詢數值或固定等待。底圖為頁內自訂協定e2ems://供應之單色圖磚(免網路)。
+            </div>
+
+            <div style="padding-bottom:6px;">
+                <span style="color:#a3c; font-size:0.85rem;">
+                    根節點 state:
+                    <b id="rootState">{{ rootState }}</b>,
+                    zoom:
+                    <span id="mapZoom">{{ fmt(mapZoom, 4) }}</span>,
+                    center:
+                    <span id="mapCenter">{{ mapCenter }}</span>,
+                    projection:
+                    <span id="optProj">{{ String(opt.projection) }}</span>
+                </span>
+            </div>
+
+            <div style="padding-bottom:6px;">
+                <button
+                    id="btnPanTo"
+                    style="cursor:pointer; padding:4px 10px;"
+                    @click="doPanTo"
+                >元件方法 panTo([25.66,122.1])</button>
+                <button
+                    id="btnCenterTo"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="doCenterTo"
+                >元件方法 centerTo([23.2,120.5])</button>
+                <button
+                    id="btnEaseTo"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="doEaseTo"
+                >API easeTo(zoom+1.5)</button>
+                <button
+                    id="btnFlyTo"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="doFlyTo"
+                >API flyTo(center+zoom)</button>
+                <button
+                    id="btnZoomTo"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="doZoomTo"
+                >API zoomTo(12)</button>
+                <button
+                    id="btnJumpTo"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="doJumpTo"
+                >API jumpTo(zoom 10)</button>
+                <button
+                    id="btnLongEase"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="doLongEase"
+                >API easeTo(5秒長動畫)</button>
+                <button
+                    id="btnApiMercator"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="doApiMercator"
+                >API setProjection(mercator)</button>
+            </div>
+            <div style="padding-bottom:6px;">
+                <button
+                    id="btnZoom7"
+                    style="cursor:pointer; padding:4px 10px;"
+                    @click="opt.zoom = 7"
+                >opt.zoom=7</button>
+                <button
+                    id="btnZoom22"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.zoom = 22"
+                >opt.zoom=22(上限)</button>
+                <button
+                    id="btnOptCenter"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.center = [23.5, 120.9]"
+                >opt.center=[23.5,120.9]</button>
+                <button
+                    id="btnMercator"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.projection = 'mercator'"
+                >opt.projection=mercator</button>
+                <button
+                    id="btnGlobe"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.projection = 'globe'"
+                >opt.projection=globe</button>
+                <button
+                    id="btnAuto"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="opt.projection = ''"
+                >opt.projection=''(自動)</button>
+                <button
+                    id="btnTall"
+                    style="cursor:pointer; padding:4px 10px; margin-left:6px;"
+                    @click="boxHeight = 400"
+                >容器高400px(resize)</button>
+            </div>
+
+            <div style="position:relative;">
+                <w-maplibregl-vue
+                    v-if="show"
+                    ref="wm"
+                    :style="{ width: '800px', height: boxHeight + 'px' }"
+                    :opt="opt"
+                ></w-maplibregl-vue>
+            </div>
+        </div>
+    </div>
+
+    <script>
+  //install
+  Vue.component("w-maplibregl-vue", window["w-maplibregl-vue"]);
+
+  //initialize
+  new Vue({
+    el: "#app",
+
+    data: function() {
+      return {
+        show: true,
+        boxHeight: 500,
+        opt: genOpt(),
+        rootState: "", //根節點 state 屬性之即時值(以 MutationObserver 讀取, 示範使用端偵測方式)
+        mapZoom: 0,
+        mapCenter: ""
+      };
+    },
+    mounted: function() {
+      let vo = this;
+      //e2e 觀察用(僅讀, 不改功能): 公開 API getMapObject()、元件根節點
+      window.__getMap = () => (vo.$refs.wm ? vo.$refs.wm.getMapObject() : null);
+      window.__getRoot = () => (vo.$refs.wm ? vo.$refs.wm.$el : null);
+      //根節點 state 屬性變化記錄: [{ t: performance.now(), state, loading, loaded, moving }], 含掛載當下之初始值(loading 為 loading 屬性值、無此屬性為 null;
+      //loaded/moving 為記錄當下 map.loaded()/map.isMoving()); 同時顯示於頁面(#rootState)
+      window.__stateLog = [];
+      let root = vo.$refs.wm.$el;
+      let rec = () => {
+        let s = root.getAttribute("state");
+        vo.rootState = String(s);
+        let m = window.__getMap();
+        let loaded = null;
+        let moving = null;
+        if (m) {
+          let c = m.getCenter();
+          vo.mapZoom = m.getZoom();
+          vo.mapCenter = c.lat.toFixed(4) + "," + c.lng.toFixed(4);
+          loaded = m.loaded();
+          moving = m.isMoving();
+        }
+        window.__stateLog.push({
+          t: performance.now(),
+          state: s,
+          loading: root.getAttribute("loading"),
+          loaded,
+          moving
+        });
+      };
+      vo.obs = new MutationObserver(rec);
+      vo.obs.observe(root, { attributes: true, attributeFilter: ["state"] });
+      rec();
+    },
+    computed: {},
+    methods: {
+      fmt: function(v, n) {
+        let x = Number(v);
+        return Number.isFinite(x)
+          ? String(Math.round(x * Math.pow(10, n)) / Math.pow(10, n))
+          : String(v);
+      },
+      //元件公開方法(依 [lat,lng] 平移, 約 500ms 動畫)
+      doPanTo: function() {
+        this.$refs.wm.panTo([25.66, 122.1]);
+      },
+      doCenterTo: function() {
+        this.$refs.wm.centerTo([23.2, 120.5]);
+      },
+      //公開 API getMapObject() 取得 map 後操作
+      doEaseTo: function() {
+        let m = this.$refs.wm.getMapObject();
+        m.easeTo({ zoom: m.getZoom() + 1.5 });
+      },
+      doFlyTo: function() {
+        this.$refs.wm.getMapObject().flyTo({ center: [121, 23.5], zoom: 9 });
+      },
+      doZoomTo: function() {
+        this.$refs.wm.getMapObject().zoomTo(12);
+      },
+      doJumpTo: function() {
+        this.$refs.wm.getMapObject().jumpTo({ zoom: 10 });
+      },
+      //長於逾時後備(3000ms)之動畫: 驗證逾時當下仍在移動則續等, state 全程為 moving
+      doLongEase: function() {
+        this.$refs.wm
+          .getMapObject()
+          .easeTo({ center: [121.0, 23.5], zoom: 9, duration: 5000 });
+      },
+      //使用端直接經 maplibre 公開 API 切換投影(不經 opt.projection)
+      doApiMercator: function() {
+        this.$refs.wm.getMapObject().setProjection({ type: "mercator" });
+      }
+    }
+  });
+    </script>
+</body>
+</html>
