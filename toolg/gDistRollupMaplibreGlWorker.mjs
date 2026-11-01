@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import vm from 'vm'
 import { fileURLToPath } from 'url'
 import { rollup } from 'rollup'
 
@@ -30,6 +31,12 @@ import { rollup } from 'rollup'
 //  「沒有支援chunk或stream機制, 無法處理大量資料」, 不宜用於本處之資料量(約 500KB)。
 //  沿用其做法之處為「Blob + createObjectURL 建立 worker」, 見 src/js/mapCore.mjs。
 //
+//why 另匯出 classicLength(classic 版前段之長度):
+//  內嵌原始碼為 ESM, 於 file:// 頁面(於檔案總管直接開啟 html)與不透明來源(sandbox iframe)下, Chrome 無法以 module worker
+//  載入 Blob, 須改供 classic 版(去掉末尾 export 之前段, 以 data: URL 供 maplibre), 見 src/js/mapCore.mjs。
+//  「哪一段是合法 classic 腳本」之切分規則只寫在下方 findClassicLength 一處, 由本腳本以 vm.Script 解析驗證,
+//  不合法(殘留 import/export、import.meta、語法錯誤)即中止產製; 使用端與測試皆只讀其結果(classicLength)。
+//
 //此檔之產出物須入版控: dev(webpack)與 build(rollup)兩種情境皆於編譯期讀取它。
 //maplibre-gl 升版後須重跑本腳本; 發布流程見 script.txt, 須排於 gDistApp.mjs 與 gDistRollupComps.mjs 之前。
 //用法: node toolg/gDistRollupMaplibreGlWorker.mjs
@@ -38,6 +45,28 @@ let fpEntry = './node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs'
 let fpTar = './src/js/maplibreWorkerInline.mjs'
 let fpPkg = './node_modules/maplibre-gl/package.json'
 let fpPkgSelf = './package.json'
+
+
+/**
+ * 取得 classic 版前段之長度(切分規則之單一擁有者)
+ * 內嵌原始碼為 ESM, 唯一之 export 為末尾之 `export { X as default };`; 去掉它之前段須為合法 classic 腳本,
+ * 以 vm.Script 解析(不執行)驗證: 殘留 export、靜態 import、import.meta、頂層 await 與其他語法錯誤皆會拋錯
+ * @param {String} code - 打包後之 worker 原始碼(ESM)
+ * @returns {Number} classic 前段之長度(= code.slice(0, 長度) 為 classic 腳本, 其後只剩末尾 export)
+ */
+export function findClassicLength(code) {
+    let iExport = code.search(/\n*export\s*\{\s*[\w$]+\s+as\s+default\s*\};?\s*$/)
+    if (iExport < 0) {
+        throw new Error(`打包後末尾非 export { X as default }, 無法取得 classic 版之長度`)
+    }
+    try {
+        new vm.Script(code.slice(0, iExport), { filename: 'maplibre-worker-classic' })
+    }
+    catch (err) {
+        throw new Error(`去掉末尾 export 後非合法 classic 腳本, file:// 頁面之 worker 將載入失敗: ${err.message}`)
+    }
+    return iExport
+}
 
 
 async function gDistRollupMaplibreGlWorker() {
@@ -77,6 +106,9 @@ async function gDistRollupMaplibreGlWorker() {
         throw new Error(`打包後仍殘留外部 import: ${mRest[0].slice(0, 120)}`)
     }
 
+    //classic 版前段之長度(file:// 與不透明來源之頁面以 classic worker 載入, 見 src/js/mapCore.mjs), 不合法即中止
+    let classicLength = findClassicLength(code)
+
     let c = ''
     c += `/**\n`
     c += ` * maplibreWorkerInline.mjs\n`
@@ -87,10 +119,14 @@ async function gDistRollupMaplibreGlWorker() {
     c += ` * maplibre-gl 版本: ${ver}\n`
     c += ` *\n`
     c += ` * why: maplibre 6.x 起 worker 為外部檔案, 打包器無法代為處理; 本套件改以 Blob 於執行期載入,\n`
-    c += ` *      使使用端無須另行部署 worker 檔案或設定 setWorkerUrl。詳見 toolg/gDistRollupMaplibreGlWorker.mjs\n`
+    c += ` *      使使用端無須另行部署 worker 檔案或設定 setWorkerUrl; file:// 與不透明來源之頁面改以 data: URL 供 classic 版(classicLength)。\n`
+    c += ` *      詳見 toolg/gDistRollupMaplibreGlWorker.mjs、src/js/mapCore.mjs\n`
     c += ` */\n`
     c += `\n`
     c += `export const maplibreVersion = ${JSON.stringify(ver)}\n`
+    c += `\n`
+    c += `//classic 版(去掉末尾 export 之前段)之長度, 供 file:// 與不透明來源之頁面以 classic worker 載入; 切分規則見 toolg/gDistRollupMaplibreGlWorker.mjs 之 findClassicLength\n`
+    c += `export const classicLength = ${classicLength}\n`
     c += `\n`
     c += `export default ${JSON.stringify(code)}\n`
 
@@ -98,7 +134,7 @@ async function gDistRollupMaplibreGlWorker() {
 
     console.log(`generated: ${fpTar}`)
     console.log(`  maplibre-gl 版本: ${ver}`)
-    console.log(`  worker 打包後: ${(code.length / 1024).toFixed(1)} KB`)
+    console.log(`  worker 打包後: ${(code.length / 1024).toFixed(1)} KB(classic 前段 ${classicLength} / ${code.length} 字元)`)
     console.log(`  內嵌檔總計:   ${(c.length / 1024).toFixed(1)} KB`)
 
 }

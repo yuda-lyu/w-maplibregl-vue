@@ -69,5 +69,15 @@ Add script for vue.
 
 Add script for w-maplibregl-vue.
 ```alias
-<script src="https://cdn.jsdelivr.net/npm/w-maplibregl-vue@1.0.60/dist/w-maplibregl-vue.umd.js"></script>
+<script src="https://yuda-lyu.github.io/w-maplibregl-vue/dist/w-maplibregl-vue.umd.js"></script>
 ```
+
+### 以 file:// 直接開啟 html 與 sandbox iframe
+
+umd 搭配本機檔案(vue 與 `w-maplibregl-vue.umd.js` 以相對路徑載入)產生之離線 html,可直接在檔案總管雙擊開啟(`file://`),亦可放在 `sandbox="allow-scripts"` 的 iframe(不透明來源)內:地圖用的 worker 由本套件內嵌,不須另行部署檔案或設定。Chromium 在這兩種環境無法以 module worker 載入 Blob(症狀:只見底圖、點位與面板都不顯示,console 僅有一行 `Worker failed to load`),故本套件偵測到 `file:` 頁面或 Blob 來源為不透明(`null`)時,自動改以 data: URL 供 classic 版 worker;http(s)、webpack、vite 等其他環境維持原本的 Blob,行為不變。
+
+已知限制:
+
+- 頁面若自帶 CSP(`Content-Security-Policy`):`file://` 須允許 `worker-src blob:`,且 `connect-src` 須允許 `data:`(或不設 `connect-src`)。Chromium 實測:只放行 `worker-src data:`、或 `connect-src 'self'` 而不含 `data:` 時,點位與面板不顯示,console 有 CSP 違規訊息;`script-src`/`default-src` 已放行 `data:`、`blob:` 者(無 `worker-src` 時回退)可用。sandbox iframe 搭配 CSP 者未測。一般離線 html 無 CSP;http(s) 頁面的 CSP 需求不變(`worker-src blob:`)。
+- 僅以 Chromium 實測;Firefox、Safari 在 `file://` 的行為未測。
+- 底圖、圖磚與地形等資源仍須由頁面能取得的來源供應(離線頁請用 data URI 或內嵌資料),本套件不改變其載入方式。

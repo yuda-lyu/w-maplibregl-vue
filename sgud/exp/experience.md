@@ -12,6 +12,18 @@
 - **`w-package-tools/src/rollupWorkerCore.mjs` 不適用第三方 worker**:實測其產物為主執行緒 proxy 模組(`export{H as default}`,頂層無 `self.onmessage`,外包自身 init/call/return 協定),而 `setWorkerUrl` 要的是 worker 腳本本身.其 base64 係因內嵌於模板字串,本專案直接產檔以 `JSON.stringify` 即可.
 - **`wsemi/src/b642u8arr.mjs` 不宜處理大量資料**:檔首自述 crypto-js 無 chunk/stream 機制.
 
+## file:// 與不透明來源(sandbox iframe)之 worker(2026-11-02 mlfile,Gitea #46,規則帳本 R17)
+
+- **徵狀與一般 worker 載入失敗相同**(只見底圖、console 一行 `Worker failed to load`),但 http 正常:先看 `location.protocol` 是否 `file:`、是否在 sandbox iframe 內.使用端以 umd 產頁並雙擊開啟最常見;失敗無提示,面板(於首次 idle 後才渲染)與點位皆不出現,地圖不 idle.
+- **成因(Chromium 153 實測,`tmp/mlfile/probe-matrix.mjs` 之 4 建法 × file:///http/sandbox)**:module worker + Blob URL 於 file:// 與 sandbox iframe 皆於非同步 `error` 事件失敗(建構子不丟錯,故 maplibre `createWorker` 之 try/catch 不會退回 classic);classic + Blob、module + data:、classic + data: 皆可;http 四種皆可.maplibre 6.14.0 `workerFactory`:僅 URL 去掉 `?#` 後以 `.cjs` 結尾走 classic(此時跨來源會先 `fetch` 再建 classic Blob worker,同來源直接 `new Worker(url)`),其餘一律 module(跨來源時再包一層 `import "<url>"` 之 Blob).故以 data: URL 末尾加 `//.cjs` 註解即可選走 classic.
+- **`location.origin` 不是安全來源**:sandbox iframe 以 `src` 載入時 `location.origin` 仍為該 URL 之來源(實測 `http://127.0.0.1:8195`),只有 `window.origin` 與 Blob URL 之來源為 `'null'`;`srcdoc` 時 `location.origin` 才為 `'null'`.所以判斷 classic 不可用 `location.origin === 'null'`,也不可用 maplibre 之準則(Blob 來源與 `location.origin` 不同,`srcdoc` 兩者皆 `'null'` 而漏掉),本套件取「`protocol === 'file:'` 或 Blob URL 之來源為 `'null'`」(`mapCore.needClassicWorker`).Chromium 上 `file:` 條款與 Blob 來源條款重疊(file:// 之 Blob 來源亦為 `'null'`),保留 `file:` 為對 Firefox/Safari(未測)之保守條款,只有 unit U49 釘住.
+- **classic 轉換可行性**:內嵌 worker(ESM 自足單檔)唯一 export 為末尾 `export { X as default };`,無靜態 import、無 `import.meta`,2 處動態 `import()` classic 可用;去掉末尾 export 之前段以 `vm.Script` 可解析(含 `"use strict"` 前綴).acorn 掃頂層 `this`:6 處皆在 class `static{}` 區塊內(`this` 為該類別),無頂層 `this`/`arguments`,故 sloppy classic 與 strict module 無語意差,未加 `"use strict"` 前綴;日後 worker 出現頂層 `this` 須重新評估.
+- **data: URL 長度**:`encodeURIComponent` 後 733,682 字元(Chrome URL 上限 2 MiB = 2,097,152 之 35%);maplibre 升版使 worker 變大到約 2.8 倍時才逼近,U51 守門.
+- **CSP 實測(file://,Chromium 153,`tmp/mlfile/probe-csp.mjs`)**:`worker-src blob:` 可;`worker-src blob:; connect-src data:` 可;`connect-src 'self'`(不含 data:)→ maplibre `fetch(data:)` 被擋,點位與面板不顯示(症狀不同:console 為 CSP 違規訊息而非 `Worker failed to load`,地圖仍 idle);只放行 `worker-src data:`(不含 blob:)→ 建立 Blob worker 被擋,`Worker failed to load`;`script-src`/`default-src` 放行 `data: blob:` 且無 `worker-src` 可(回退).這些環境修前即失敗,非本修正引入.
+- **e2e 手法**:①`ctx.route('http://127.0.0.1:8195/**')` + `route.fulfill` 於瀏覽器內供應虛擬 http 來源(不開 port、不連外,仍為 `127.0.0.1` 可信來源),sandbox 外層頁(src 與 srcdoc 兩種)由 route 動態產生;②`ctx.addInitScript` 以 `Proxy` 包 `window.Worker` 記錄 `(url 開頭, type)`(只讀觀察,iframe 內亦生效),斷言 http 仍為 `module`+`blob:`、file:///sandbox 為 `classic`,證明走的是預期路徑而非碰巧通過;③點位以畫面像素取樣(`pngjs` 解螢幕截圖,三個點位中心 ±12px 內點位色 `#2196f3` 像素數,修後約 270、修前 0)佐證「使用者看得到」;④sandbox iframe 以 `locator('iframe').elementHandle().contentFrame()` 取 frame 後 `frame.waitForFunction/getByText`;⑤測當前 src:`before` 以 `w-package-tools/src/rollupFiles.mjs` 建置到 `test/_tmp/e2e-fileprotocol/dist`(約 25 秒,與發布同設定:umd、kebabCase、壓縮),`after` 刪除,不讀 `./dist`,故不會測到過期產物.
+- **變異檢驗的設計**:對第三方內部判斷的「釘住」不能只靠 e2e——把 minified maplibre 原始碼檢查式(`checkMaplibreWorkerFactory`)另做成「單點改動須被偵測」的測試(U53),否則檢查式寫鬆而永遠通過.
+- **Bash 工具內路徑反斜線會被吃掉**:`decision-log.mjs C:\opensrcOper\...` 變成 `opensrcOperdnow...` 而失敗;任務資料夾一律用正斜線 `C:/opensrcOper/dnow/<id>`.
+
 ## maplibre-gl 6.14.0 縮放範圍與相機事件語意(2026-10-16 issue #3 審計與實作)
 
 - **`minZoom` 實作預設為 -2(文件寫 0)**(`maplibre-gl-dev.mjs:56767` `defaultMinZoom = -2`),`setMinZoom(null)` 亦回 -2;`maxZoom` 預設 22.下限須由本套件明給(R11 預設 0).

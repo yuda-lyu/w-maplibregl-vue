@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>e2e file protocol</title>
+<!-- 以相對路徑載入本機 vue 與 test/e2e-fileprotocol.test.mjs 於 before 自 src 建置到 test/_tmp/e2e-fileprotocol/dist 之 umd(全程離線),
+     供該測試以 file://、虛擬 http 來源與 sandbox iframe 開啟; 勿手動建置 dist 取代, 否則可能測到過期之產物 -->
+<script src="../../node_modules/vue/dist/vue.min.js"></script>
+<script src="../_tmp/e2e-fileprotocol/dist/w-maplibregl-vue.umd.js"></script>
+</head>
+<body style="margin:0;">
+<div id="app" style="width:900px; height:600px;">
+    <w-maplibregl-vue ref="m" style="width:100%; height:100%;" :opt="opt"></w-maplibregl-vue>
+</div>
+<script>
+    //底圖為 data-URI 色塊, terrainMap 給 {} 不套地形(未給時會載入遠端 DEM), 點位 3 個(GeoJSON, 須經 worker 才繪出)
+    var TILE_RED = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO4o6HxHwAFPAIs0Zo91QAAAABJRU5ErkJggg==' //[220,40,40]
+    var lib = window['w-maplibregl-vue']
+    var vm = new Vue({
+        el: '#app',
+        components: { 'w-maplibregl-vue': lib.default || lib },
+        data: {
+            opt: {
+                center: [0, 121.0],
+                zoom: 10,
+                panelBaseMaps: {
+                    show: true,
+                    terrainMap: {},
+                    baseMaps: [
+                        { name: 'base red', url: TILE_RED, colorShade: 'light', visible: true, opacity: 1 },
+                    ],
+                },
+                pointSets: [
+                    {
+                        title: 'pts A',
+                        fillColor: '#2196f3',
+                        visible: true,
+                        points: [
+                            { title: 'p1', latLng: [0, 121.0] },
+                            { title: 'p2', latLng: [0.02, 121.03] },
+                            { title: 'p3', latLng: [-0.02, 120.97] },
+                        ],
+                    },
+                ],
+            },
+        },
+    })
+
+    //__e2e, 地圖首次 idle 後之觀察值: 已繪出之點位數(Point 圖徵); 面板文字由測試以 locator 等其出現(面板於首次 idle 後才渲染)
+    //worker 載入失敗時地圖不會 idle, 故 20 秒後亦結算(idle 為 false), 使斷言呈現實際失敗而非等待逾時
+    window.__e2e = { done: false }
+    var fin = function(map, idle) {
+        if (window.__e2e.done) {
+            return
+        }
+        var fs = map.queryRenderedFeatures().filter(function(f) { return f.geometry && f.geometry.type === 'Point' })
+        window.__e2e = { done: true, idle: idle, points: fs.length }
+    }
+    var tick = setInterval(function() {
+        var map = vm.$refs.m && vm.$refs.m.getMapObject ? vm.$refs.m.getMapObject() : null
+        if (!map) {
+            return
+        }
+        clearInterval(tick)
+        map.once('idle', function() { fin(map, true) })
+        setTimeout(function() { fin(map, false) }, 20000)
+    }, 100)
+</script>
+</body>
+</html>

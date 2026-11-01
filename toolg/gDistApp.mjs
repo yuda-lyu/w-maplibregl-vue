@@ -15,11 +15,11 @@ let opt = {
     <script src="https://cdn.jsdelivr.net/npm/lodash/lodash.min.js"></script>
 
     <!-- wsemi -->
-    <script src="https://cdn.jsdelivr.net/npm/wsemi/dist/wsemi.umd.min.js"></script>
+    <script src="https://yuda-lyu.github.io/wsemi/dist/wsemi.umd.js"></script>
 
     <!-- w-gis -->
-    <script _src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/w-gis.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/w-gis@latest/dist/interp2.wk.umd.js"></script>
+    <script _src="https://yuda-lyu.github.io/w-gis/dist/w-gis.umd.js"></script>
+    <script src="https://yuda-lyu.github.io/w-gis/dist/interp2.wk.umd.js"></script>
 
     <!-- data -->
     <script src="https://cdn.jsdelivr.net/npm/w-demores/res/data/dataRain.js"></script>
