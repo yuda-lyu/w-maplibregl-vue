@@ -5,8 +5,9 @@
 //   修正後該等環境改以 data: URL 供 classic 版 worker(src/js/mapCore.mjs), 結果須與 http 相同; http(s) 路徑不變(仍為 module Blob)。
 //   本測試同時釘住 mapCore.mjs 所依賴之 maplibre 內部判斷(僅 '.cjs' 結尾走 classic): maplibre-gl 升版改了判斷時, F1、F3、F4 即紅。
 //
-// 須測當前 src 之產物, 不得靜默測到過期之 dist: before 自 src 建置 umd 到 test/_tmp/e2e-fileprotocol/dist(與 script.txt 之 gDistRollupComps.mjs 同設定: umd、kebabCase、壓縮),
-//   不讀 ./dist; after 刪除該夾(含 dist)。內嵌 worker(src/js/maplibreWorkerInline.mjs)須已由 toolg/gDistRollupMaplibreGlWorker.mjs 產製(unit-workerClassic U47 檢查其與切分規則同步)。
+// 須測當前 src 之產物, 不得靜默測到過期之 dist: before 把 src、toolg/gDistRollupComps.mjs(script.txt 之建置列)、package.json 複製到 test/_tmp/e2e-fileprotocol/(副本),
+//   以該夾為 cwd 執行 node toolg/gDistRollupComps.mjs, 產物為副本之 dist(test/_tmp/e2e-fileprotocol/dist), 不讀 ./dist; 建置選項只在 toolg 腳本內, 測試不另寫; after 刪除該夾(含 dist)。
+//   內嵌 worker(src/js/maplibreWorkerInline.mjs)須已由 toolg/gDistRollupWorkerFuncs.mjs 產製(unit-workerClassic U47 檢查其與切分規則同步, unit-workerBuild U54 檢查其與重跑產製腳本之結果一致)。
 //
 // 真實 user path(3 步):
 //   1. 開啟頁面(file://: 於檔案總管雙擊 test/fixtures/fileProtocol.html; 頁面以相對路徑載入本機 vue 與上述 umd)
@@ -27,8 +28,8 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { PNG } from 'pngjs'
-import rollupFiles from 'w-package-tools/src/rollupFiles.mjs'
 import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import { copyToCopy, runNodeInCopy } from './tools/toolgCopy.mjs'
 
 //以模組位置定位(不依執行目錄)
 let ROOT = fileURLToPath(new URL('../', import.meta.url))
@@ -108,21 +109,23 @@ describe('e2e-fileprotocol', function() {
     before(async function() {
         this.timeout(300000)
 
-        //自 src 建置當前產物到本測試專用夾(清空後寫入), 不讀 ./dist
+        //自 src 建置當前產物: 副本夾(清空後寫入)內以 cwd 執行發布列之建置腳本, 不讀 ./dist
         fs.rmSync(DIR_TMP, { recursive: true, force: true })
         fs.mkdirSync(DIR_TMP, { recursive: true })
-        await rollupFiles({
-            fns: 'WMaplibreglVue.vue',
-            fdSrc: path.join(ROOT, 'src', 'components'),
-            fdTar: DIR_DIST,
-            format: 'umd',
-            nameDistType: 'kebabCase',
-            globals: {},
-            external: [],
-            bSourcemap: false,
-            bLog: false,
-        })
-        assert.ok(fs.existsSync(path.join(DIR_DIST, 'w-maplibregl-vue.umd.js')), `須已自 src 建置 ${DIR_DIST}`)
+        copyToCopy(ROOT, DIR_TMP, ['src', 'toolg/gDistRollupComps.mjs', 'package.json'])
+        let r = await runNodeInCopy(DIR_TMP, ['toolg/gDistRollupComps.mjs'])
+        assert.strictEqual(r.code, 0, `建置腳本須成功離開(實得 ${r.code}): ${(r.stdout + r.stderr).slice(-1500)}`)
+
+        //建置選項只在 toolg 腳本內, 故產物之各項由此驗(腳本選項被改壞時此處即紅): 產物與 sourcemap 存在、檔名為 kebabCase、全域匯出名、banner、無 external
+        let fpUmd = path.join(DIR_DIST, 'w-maplibregl-vue.umd.js')
+        assert.ok(fs.existsSync(fpUmd), `須已自 src 建置 ${fpUmd}(format umd、nameDistType kebabCase)`)
+        assert.ok(fs.existsSync(fpUmd + '.map'), '須有 sourcemap')
+        let code = fs.readFileSync(fpUmd, 'utf8')
+        let head = code.slice(0, 1200)
+        let ver = JSON.parse(fs.readFileSync(path.join(DIR_TMP, 'package.json'), 'utf8')).version
+        assert.ok(head.indexOf(`w-maplibregl-vue v${ver}`) >= 0, `banner 須含 w-maplibregl-vue v${ver}`)
+        assert.ok(/\["w-maplibregl-vue"\]=\w\(\)/.test(head), 'umd 須以全域名 w-maplibregl-vue 匯出(測試頁取 window[\'w-maplibregl-vue\'])')
+        assert.ok(/module\.exports=\w\(\):"function"==typeof define&&define\.amd\?define\(\w\)/.test(head), 'umd 不得有 external(define 與 module.exports 皆無相依參數)')
     })
     after(function() {
         fs.rmSync(DIR_TMP, { recursive: true, force: true })

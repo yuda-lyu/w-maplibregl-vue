@@ -14,7 +14,7 @@ import workerSource, { maplibreVersion, classicLength } from './maplibreWorkerIn
 //故改以「內嵌 worker 原始碼 + 執行期建 Blob」供 setWorkerUrl, 使使用端無須部署任何 worker 檔案,
 //亦無須自行設定, 於 umd script / webpack / vite / 下游 bundler 皆一致可用。
 //(maplibre v6 僅提供 setWorkerUrl(string), 未提供可傳入 Worker 類別或工廠之入口, 故只能走此路)
-//內嵌原始碼由 toolg/gDistRollupMaplibreGlWorker.mjs 產製; Blob 建立 worker 之做法沿用 w-package-tools 之 rollupWorkerCore
+//內嵌原始碼由 toolg/gDistRollupWorkerFuncs.mjs 產製; Blob 建立 worker 之做法沿用 w-package-tools 之 rollupWorkerCore
 //
 //file:// 頁面(於檔案總管直接開啟 html)與不透明來源(sandbox iframe 等)不可用 module Blob, 改以 data: URL 供 classic 版:
 //  maplibre 之 workerFactory 只在 URL 以 '.cjs' 結尾時走 classic, 其餘一律 module; module 時若 URL 之來源與 location.origin 不同(isCrossOrigin)
@@ -25,7 +25,7 @@ import workerSource, { maplibreVersion, classicLength } from './maplibreWorkerIn
 //  點位等需 worker 之圖層與面板皆不顯示(使用端以 umd 產頁並雙擊開啟時只見底圖, 無任何提示)。
 //  classic worker + Blob/data: URL 與 module worker + data: URL 於上述環境皆可(實測), 本處取 classic + data: URL:
 //  URL 以 '//.cjs' 註解結尾使 maplibre 走 classic(判為跨來源時先 fetch 再建 classic Blob worker; 否則直接 new Worker(data: URL));
-//  classic 版為內嵌原始碼去掉末尾 export 之前段, 其長度 classicLength 由 toolg/gDistRollupMaplibreGlWorker.mjs 以 vm.Script 驗證後寫入(切分規則只在該處)。
+//  classic 版為內嵌原始碼去掉末尾 export 之前段, 其長度 classicLength 由 toolg/gDistRollupWorkerFuncs.mjs 以 vm.Script 驗證後寫入(切分規則只在該處)。
 //判斷條件(needClassicWorker)取「protocol 為 'file:'」或「Blob URL 之來源為不透明('null')」, 不取下列兩者(皆有實測反例):
 //  ①maplibre 判斷跨來源之準則(Blob URL 之來源與 location.origin 不同): sandbox iframe(srcdoc)兩者皆 'null' 而漏掉, 但 module Blob 於該處仍失敗;
 //  ②location.origin 為 'null': sandbox iframe(src)之 location.origin 仍為該 URL 之來源(window.origin 才為 'null'), 亦漏掉。
@@ -76,10 +76,10 @@ function ensureWorkerUrl() {
         return
     }
 
-    //check, 內嵌 worker 與主程式須為同版, 不同版代表 maplibre-gl 升版後未重跑 toolg/gDistRollupMaplibreGlWorker.mjs
+    //check, 內嵌 worker 與主程式須為同版, 不同版代表 maplibre-gl 升版後未重跑 toolg/gDistRollupWorkerFuncs.mjs
     let ver = maplibregl.getVersion()
     if (ver !== maplibreVersion) {
-        console.warn(`[mapCore] 內嵌 worker 版本[${maplibreVersion}]與 maplibre-gl[${ver}]不一致, 請重跑 node toolg/gDistRollupMaplibreGlWorker.mjs`)
+        console.warn(`[mapCore] 內嵌 worker 版本[${maplibreVersion}]與 maplibre-gl[${ver}]不一致, 請重跑 node toolg/gDistRollupWorkerFuncs.mjs`)
     }
 
     //Blob 以 UTF-8 編碼字串, 故內嵌原始碼之非 ASCII 字元無須另行處理

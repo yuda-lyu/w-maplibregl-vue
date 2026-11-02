@@ -39,7 +39,7 @@ import { rollup } from 'rollup'
 //
 //此檔之產出物須入版控: dev(webpack)與 build(rollup)兩種情境皆於編譯期讀取它。
 //maplibre-gl 升版後須重跑本腳本; 發布流程見 script.txt, 須排於 gDistApp.mjs 與 gDistRollupComps.mjs 之前。
-//用法: node toolg/gDistRollupMaplibreGlWorker.mjs
+//用法: node toolg/gDistRollupWorkerFuncs.mjs
 
 let fpEntry = './node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs'
 let fpTar = './src/js/maplibreWorkerInline.mjs'
@@ -69,7 +69,7 @@ export function findClassicLength(code) {
 }
 
 
-async function gDistRollupMaplibreGlWorker() {
+async function gDistRollupWorkerFuncs() {
 
     if (!fs.existsSync(fpEntry)) {
         throw new Error(`找不到 ${fpEntry}, maplibre-gl 之 worker 檔名或路徑可能已變更, 須同步修正本腳本`)
@@ -115,17 +115,17 @@ async function gDistRollupMaplibreGlWorker() {
     c += ` * maplibre-gl 之 worker 自足打包內嵌字串(機器產製, 請勿手改)\n`
     c += ` *\n`
     c += ` * 來源: ${fpEntry}(已打包為無外部 import 之自足單檔)\n`
-    c += ` * 產製: node toolg/gDistRollupMaplibreGlWorker.mjs\n`
+    c += ` * 產製: node toolg/gDistRollupWorkerFuncs.mjs\n`
     c += ` * maplibre-gl 版本: ${ver}\n`
     c += ` *\n`
     c += ` * why: maplibre 6.x 起 worker 為外部檔案, 打包器無法代為處理; 本套件改以 Blob 於執行期載入,\n`
     c += ` *      使使用端無須另行部署 worker 檔案或設定 setWorkerUrl; file:// 與不透明來源之頁面改以 data: URL 供 classic 版(classicLength)。\n`
-    c += ` *      詳見 toolg/gDistRollupMaplibreGlWorker.mjs、src/js/mapCore.mjs\n`
+    c += ` *      詳見 toolg/gDistRollupWorkerFuncs.mjs、src/js/mapCore.mjs\n`
     c += ` */\n`
     c += `\n`
     c += `export const maplibreVersion = ${JSON.stringify(ver)}\n`
     c += `\n`
-    c += `//classic 版(去掉末尾 export 之前段)之長度, 供 file:// 與不透明來源之頁面以 classic worker 載入; 切分規則見 toolg/gDistRollupMaplibreGlWorker.mjs 之 findClassicLength\n`
+    c += `//classic 版(去掉末尾 export 之前段)之長度, 供 file:// 與不透明來源之頁面以 classic worker 載入; 切分規則見 toolg/gDistRollupWorkerFuncs.mjs 之 findClassicLength\n`
     c += `export const classicLength = ${classicLength}\n`
     c += `\n`
     c += `export default ${JSON.stringify(code)}\n`
@@ -142,8 +142,8 @@ async function gDistRollupMaplibreGlWorker() {
 
 //直接執行時才跑(被 import 時不跑)
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-    gDistRollupMaplibreGlWorker()
+    gDistRollupWorkerFuncs()
 }
 
 
-export default gDistRollupMaplibreGlWorker
+export default gDistRollupWorkerFuncs

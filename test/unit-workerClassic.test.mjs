@@ -1,4 +1,4 @@
-// unit: file:// 與不透明來源(sandbox iframe)以 classic 版 worker 載入之純邏輯(src/js/mapCore.mjs、toolg/gDistRollupMaplibreGlWorker.mjs, 規則帳本 R17)
+// unit: file:// 與不透明來源(sandbox iframe)以 classic 版 worker 載入之純邏輯(src/js/mapCore.mjs、toolg/gDistRollupWorkerFuncs.mjs, 規則帳本 R17)
 //
 // 不需瀏覽器; 真瀏覽器於 file:// 與 sandbox iframe 載入 worker 之結果由 test/e2e-fileprotocol.test.mjs 驗證。
 // 規格句(以下代稱 J-xxx):
@@ -15,7 +15,7 @@ import fs from 'fs'
 import vm from 'vm'
 import workerSource, { classicLength } from '../src/js/maplibreWorkerInline.mjs'
 import { needClassicWorker, buildClassicWorkerUrl } from '../src/js/mapCore.mjs'
-import { findClassicLength } from '../toolg/gDistRollupMaplibreGlWorker.mjs'
+import { findClassicLength } from '../toolg/gDistRollupWorkerFuncs.mjs'
 
 //maplibre 判斷 classic 之規則(maplibre-gl 之 isClassicWorkerUrl 的複本, 由 U52 釘住其與 maplibre 同步)
 let isClassicWorkerUrl = (url) => url.split(/[?#]/)[0].endsWith('.cjs')
