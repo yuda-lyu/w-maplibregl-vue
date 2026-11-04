@@ -66,6 +66,19 @@
 - **追蹤器初值與元件初值須單一來源**:變異「初值改 idle」只被單元測試抓到、e2e 不可觀察——因元件在載入時另有 `projectiontransition`(`load` 後自動投影遷移)把狀態推成 moving 再由 idle 落定;元件初值改取 `moveState.getState()` 避免兩處各寫一個常數.
 - **主控守門 hooks 擋 `>`/`>>` 寫檔**:迴圈重跑、背景鏈改寫成 `tmp/map30/*.mjs`(`spawnSync` 呼叫 `quiet-run`)再以 `node` 執行;`Atomics.wait` 可在同步 node 腳本內睡眠.
 
+## 比例尺色條與文字之實作與測試經驗(2026-11-04 wm71,Gitea #71,規則帳本 R15)
+
+- **提案(建議檔)查證屬實**:1.0.66 真實地圖以 `unproject` 量色條實寬兩點之 `distanceTo`,緯度 0 zoom 12 比值 1.278、緯度 24.7 zoom 12 為 0.703、緯度 0 zoom 10 為 0.958,色條實寬 82px(`width:80px` + 邊框 2px,`content-box`);與提案表格逐位相符(證據 `wm71-evidence/01`).`getRoundNum` 在 `maplibre-gl/src/ui/control/scale_control.ts:151`:取 `10^(整數位數-1)` 為底、首位 ≥5→5、≥3→3、≥2→2、≥1→1(< 1 時走 `getDecimalRoundNum` 取一位有效小數,非 1/2/3/5 表),與提案所述一致.
+- **量色條實寬須用 `:scope > div > div`**:`.clsScale` 內 `el.querySelector('div > div')` 會命中 flex 容器本身(選擇器對整份文件求值,`.clsScale` 為 div 即符合 `div > div`),量到 111.6px 而非 82px,探測時曾因此誤判;測試用 `.clsScale > div > div`.
+- **提案草案的 `border-box` + `height:3px` 會讓色條外高由 5px 變 3px**(原 `content-box` 之 3px + 上下邊框 2px = 5px):本次改 `height:5px`,並以 e2e 斷言外高 5px(變異 M7 驗證)+ 修前後量排版數字(面板高 19px、色條外高 5px、色條與文字間隙 4px、面板右下錨點皆同,`wm71-evidence/06`、`08`).
+- **草案以 `max / pow10(e)` 取首位有浮點邊界缺陷**:`3e-8 / 1e-8 = 2.9999999999999996` 使恰為 3 × 10^k 的上限少一級(V8 實測 `3e-4`、`3e-8`、`3e-13`、`3e-15`、`5e-17`… 等 15 個值偏小,`wm71-evidence/09`).改為與 `Number(n + 'e' + e)`(字串轉換得精確值)直接比較;U59 於實作初稿即抓到此問題(`wm71-evidence/07`).
+- **V8 的 `Math.log10` 於 1e-30~1e30 之 10 的次方皆精確**(實測):故「log10 偏小一位之比較修正」在本機走不到,變異「拿掉修正」先存活(U59 不鑑別);U61 暫代 `Math.log10 = (x) => Math.log(x) / Math.LN10`(`Math.log(1000) / Math.LN10 = 2.9999999999999996`)才使該分支被執行並殺死變異.遇到「防禦其他引擎」的分支,測試須能在本引擎製造該條件(暫代被依賴的內建函式,`finally` 還原),否則變異存活被誤判為冗餘.
+- **公式在 globe 低層級不準(R15 〈限制〉,未處理)**:預設投影低層級為 globe,墨卡托公式/`unproject` 實測 80px 距離:zoom 0 為 0.667、zoom 1 為 0.927~0.939、zoom 2 為 0.977~0.980、zoom 3 為 0.992~0.993、zoom ≥5 為 0.999~1.001(`wm71-evidence/02`);墨卡托投影全層級 1.001~1.010.提案草案的 E2E-Z16b 用預設投影 `jumpTo` 到 zoom 7,恰在誤差 < 0.1% 處,故不受影響;新增 e2e 若要測 zoom ≤ 2 須先決定是否改用 `unproject` 實測(需元件新增與地圖事件同步之狀態,待裁示).
+- **內建 `ScaleControl` 不改用之依據**(讀碼與讀 CSS,未實跑):`map.addControl` 掛入 maplibre 自己的四角容器,不經 `panelScale.position`/`getPanelOrder`;樣式 `maplibre-gl.css` 為白底 75%、`#333` 字與邊框,與深色玻璃面板不同;文字 ` `;`getRoundNum` 取整後色條寬可超過 `maxWidth`(`scale_control.ts:140-141` 之 `ratio` 可 > 1).優點是以 `unproject` 實測,globe 低層級較準.
+- **色條寬隨縮放變動 → 面板寬度變動**:右下角面板以右緣為錨,左緣隨之移動(實測緯度 0 zoom 10:修前面板寬 123.6px、修後 107.1px);高度不變.若使用端在意可另案固定面板最小寬(不屬 #71).
+- **e2e 比值斷言的容差**:`distanceTo` 取地球半徑 6371008.8 m,公式取赤道周長 40075016.686 m 換算(半徑 6378137 m),系統差 0.11%;Chrome 的 LayoutUnit 為 1/64px,`getBoundingClientRect().width` 量到 65.4062 而非 65.41;故比值取 2%、色條寬取 ±0.5px,外高 5px 與 `border-box` 另以精確斷言.
+- **變異檢驗作法(src 就地改、備份還原)**:修好後先 `cp` 備份 `scaleBar.mjs`、`WMaplibreglVue.vue` 到 `tmp/wm71/backup/`,每個變異就地以 Edit 改、跑對應測試、`cp` 備份還原,最後 `cmp` 回驗與備份位元組相同並 `git grep MUTANT` 無殘留;不使用 `git restore`/`stash`.元件層變異(拿掉 `border-box`、外高 3px)需跑 e2e(約 2 分鐘/次),純函式變異只跑 `unit-scaleBar`(2 秒).
+
 ## 建置流程(script.txt)
 
 - **`gDistApp.mjs` 會清空 `docs/examples/`**(`rollupVueToHtml` 所致),116 個 `ex-*.html` 須由其後之 `gExtractHtml.mjs` + `gDocExams.mjs` 重建.**驗證時不可只挑部分步驟跑**,否則 docs 被刪(2026-10-01 曾發生,補跑兩步後恢復).只需驗 dist 時只跑 `gDistRollupComps.mjs`(僅寫 dist).

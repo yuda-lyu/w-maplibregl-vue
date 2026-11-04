@@ -179,8 +179,9 @@
                     v-if="panelScale.show && panelScale.position===corner"
                 >
                     <div style="display:flex; align-items:center; gap:4px;">
-                        <div style="width:80px; height:3px; background:#fff; border:1px solid #fff;"></div>
-                        <span>{{ scaleText }}</span>
+                        <!-- 色條寬依整齊距離換算(R15); border-box 使實寬(含 1px 邊框)即為算出之寬度, 外高維持 5px(3px + 邊框) -->
+                        <div :style="{ width: scaleBar.width+'px', height:'5px', background:'#fff', border:'1px solid #fff', boxSizing:'border-box' }"></div>
+                        <span>{{ scaleBar.text }}</span>
                     </div>
                 </div>
 
@@ -409,6 +410,7 @@ import { createMap, applyProjection as _applyProjection, applyZoomRange } from '
 import { createMoveState, MOVE_STATE_MOVING } from '../js/moveState.mjs'
 import { applyBaseMaps, preloadBaseMapStyles, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, getBaseMapOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
+import { computeScaleBar } from '../js/scaleBar.mjs'
 import { clearTrackedByPrefix, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
 import { createDirectionalPopup, recheckSinglePopupDir, registerIconImage } from '../js/popupManager.mjs'
 import { renderPointSets as renderPointSetsImpl, renderPolylineSets as renderPolylineSetsImpl, renderPolygonSets as renderPolygonSetsImpl, renderGeojsonSets as renderGeojsonSetsImpl, renderImageSets as renderImageSetsImpl, renderContourSets as renderContourSetsImpl } from '../js/layerRenderers.mjs'
@@ -842,13 +844,9 @@ export default {
             return shade
         },
 
-        /** 比例尺文字 */
-        scaleText() {
-            let lat = isNumber(this.currentCenter[0]) ? this.currentCenter[0] : 23.5 //緯度 0 為有效值, 不可用 || 回退
-            //maplibre 世界為 512px(zoom 0 = 512px), 赤道每像素公尺 = 40075016.686 / 512 = 78271.51696(R15; 256px 世界之 156543.03392 會使文字為實際距離之 2 倍)
-            let mpp = 78271.51696 * Math.cos(lat * Math.PI / 180) / Math.pow(2, this.currentZoom)
-            let d = mpp * 80
-            return d >= 1000 ? Math.round(d / 1000) + ' km' : Math.round(d) + ' m'
+        /** 比例尺之距離文字與色條寬(R15; 緯度 0 為有效值, 非有限數字才回退預設緯度, 見 scaleBar.mjs) */
+        scaleBar() {
+            return computeScaleBar(this.currentCenter[0], this.currentZoom)
         },
 
         /** 3D指北針：模擬俯視角傾斜效果的 CSS transform */

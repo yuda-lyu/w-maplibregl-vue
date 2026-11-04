@@ -6,7 +6,7 @@
 //   J-zoom  opt.zoom 「元件不另夾值, 超出範圍者由地圖拉入範圍, 使用者縮放、縮放按鈕或API縮放後會把地圖實際層級寫回本欄位
 //           (地球投影下實際下限隨緯度略低於minZoom, 墨卡托投影下受容器高度限制而略高於minZoom, 皆以實際層級為準)」
 //   J-ctr   opt.center 「兩值皆須為有限數且緯度在±90內, 否則視為未給(用預設[23.5, 121.1])」
-//   J-scale 比例尺文字為 80px 對應之實際地面距離(R15)
+//   J-scale 比例尺文字為色條實寬對應之實際地面距離; 色條依整齊距離(1、2、3、5 × 10^n 公尺)換算, 寬度落在 (40, 80] px, 實寬(含邊框)即為算出之寬度(R15)
 //   R12     父層同一 tick 同時變更 center 與 zoom(含整個換新 opt)兩者皆生效; 平移動畫中改 zoom 不吞 center; 切換投影/容器 resize 後 opt.zoom 與地圖一致
 //
 // 真實 user path(6 步):
@@ -46,7 +46,7 @@
 //   - E2E-Z13 容器 resize 後 opt.zoom 與地圖一致
 //   - E2E-Z14 初始超界 opt.zoom=25 於建圖後寫回 22; opt 未宣告 zoom 鍵者不新增鍵; Z14c 未宣告 zoom 鍵而預設 6 落在範圍外(maxZoom=4)時回寫且其後無關之 opt 變更不 setZoom/jumpTo
 //   - E2E-Z15 叢集點擊展開層級 > 18 不彈回
-//   - E2E-Z16 比例尺文字為 80px 實際地面距離(兩組 zoom/緯度)
+//   - E2E-Z16 比例尺文字為色條實際地面距離(兩組 zoom/緯度); Z16b 取整邊界(修前文字與色條差 +28%、-30%、-4%)仍相符; Z16c 緯度 × 層級網格(含小於 1 m 之文字)文字、色條寬、整齊距離皆成立
 //   - E2E-Z17 center=[91,121] 非法值+zoom 同 tick: 不崩潰, center 用預設, zoom 生效; Z17b 建圖時同
 //   - E2E-Z18~Z21 開啟地形(離線平坦 DEM)之代表案例: 連按放大鈕不彈回、同 tick center+zoom、範圍拉入+center、平移動畫中改 zoom
 import assert from 'assert'
@@ -567,33 +567,82 @@ describe('e2e-zoomrange', function() {
         assert.ok(nonDecreasing(zs), `zoomend 序列不應回降: ${JSON.stringify(zs)}`)
     })
 
-    //比例尺: 文字 → 公尺
+    //比例尺: 文字 → 公尺(格式: km 必為 1 以上整數、m 必小於 1000; 即不得出現「0.5 km」「1000 m」)
+    const SCALE_RE = /^\d+(\.\d+)? (km|m)$/
     let scaleMeters = async () => {
         let t = await page.locator('.clsScale span').innerText()
-        let m = t.match(/^(\d+) (km|m)$/)
-        assert.ok(m, `比例尺文字格式應為「N km」或「N m」, 實際「${t}」`)
-        return { text: t, meters: Number(m[1]) * (m[2] === 'km' ? 1000 : 1) }
+        let m = t.match(SCALE_RE)
+        assert.ok(m, `比例尺文字格式應為「N km」「N m」或「0.N m」, 實際「${t}」`)
+        let n = Number(t.split(' ')[0])
+        if (m[2] === 'km') assert.ok(Number.isInteger(n) && n >= 1, `km 應為 1 以上整數(0.5 km 應寫 500 m), 實際「${t}」`)
+        else assert.ok(n < 1000, `m 應小於 1000(1000 m 應寫 1 km), 實際「${t}」`)
+        return { text: t, meters: n * (m[2] === 'km' ? 1000 : 1) }
     }
-    //地圖畫布中央橫向 80px 兩點間之實際地面距離(公尺)
-    let realMeters80 = async () => await page.evaluate(() => {
+    //色條: 實寬(含邊框)、box-sizing 與該實寬在地圖畫布中央橫向對應之實際地面距離(公尺)
+    let scaleBar = async () => await page.evaluate(() => {
+        let bar = document.querySelector('.clsScale > div > div')
+        let w = bar.getBoundingClientRect().width
         let m = window.__getMap()
         let r = m.getCanvas().getBoundingClientRect()
         let cx = r.width / 2; let cy = r.height / 2
-        return m.unproject([cx, cy]).distanceTo(m.unproject([cx + 80, cy]))
+        return { width: w, height: bar.getBoundingClientRect().height, boxSizing: getComputedStyle(bar).boxSizing, real: m.unproject([cx, cy]).distanceTo(m.unproject([cx + w, cy])) }
     })
+    //J-scale: 文字為色條實寬對應之實際地面距離(容差 2%; maplibre 之 distanceTo 取地球半徑 6371008.8 m, 與赤道周長換算差約 0.1%),
+    //  距離為整齊值(1、2、3、5 × 10^n), 色條實寬(含邊框)落在 (40, 80] px 且 box-sizing 為 border-box(實寬即算出之寬度)
+    let assertScaleTrue = async (tag) => {
+        await waitUntilExist(page, '比例尺文字更新', () => document.querySelector('.clsScale') && /^\d+(\.\d+)? (km|m)$/.test(document.querySelector('.clsScale span').innerText))
+        let s = await scaleMeters()
+        let b = await scaleBar()
+        let ratio = s.meters / b.real
+        assert.ok(ratio > 0.98 && ratio < 1.02, `${tag} 比例尺「${s.text}」(${s.meters} m) 與色條實際 ${b.real.toFixed(1)} m(${b.width.toFixed(2)} px) 之比值應約 1, 實際 ${ratio.toFixed(3)}`)
+        let head = s.meters.toExponential().split('e')[0]
+        assert.ok(['1', '2', '3', '5'].includes(head), `${tag} 比例尺距離應為 1、2、3、5 × 10^n 公尺, 實際「${s.text}」`)
+        assert.ok(b.width > 40 && b.width <= 80 + 1e-6, `${tag} 色條實寬應在 (40, 80] px, 實際 ${b.width}`)
+        assert.strictEqual(b.boxSizing, 'border-box', `${tag} 色條應為 border-box(實寬含邊框即算出之寬度)`)
+        //樣式不變(#71 不得改動除色條寬與 box-sizing 外之樣式): 色條外高維持 5 px(原 height 3px + 上下邊框各 1px)
+        assert.strictEqual(b.height, 5, `${tag} 色條外高應維持 5 px, 實際 ${b.height}`)
+        return { text: s.text, width: b.width }
+    }
     for (let [btn, label] of [['#btnScale1', '緯度 0 zoom 10'], ['#btnScale2', '緯度 25 zoom 16']]) {
-        it(`E2E-Z16 比例尺文字為 80px 實際地面距離(${label})`, async function() {
+        it(`E2E-Z16 比例尺文字為色條實際地面距離(${label})`, async function() {
             await gotoExample()
             await click(btn)
             await settle()
-            await waitUntilExist(page, '比例尺文字更新', () => document.querySelector('.clsScale') && /^\d+ (km|m)$/.test(document.querySelector('.clsScale span').innerText))
-            let s = await scaleMeters()
-            let real = await realMeters80()
-            //J-scale: 80px 對應之實際地面距離(取整後容差 5%); 修前為 2 倍(例 zoom 10 緯度 0: 12 km vs 實際 6.1 km)
-            let ratio = s.meters / real
-            assert.ok(ratio > 0.95 && ratio < 1.05, `比例尺「${s.text}」(${s.meters} m) 與實際 ${real.toFixed(1)} m 之比值應約 1, 實際 ${ratio.toFixed(3)}`)
+            await assertScaleTrue(label)
         })
     }
+    //修前: 文字以 Math.round 取整而色條固定 82 px, 1528.7 m 顯示 2 km(+28%)、1387 m 顯示 1 km(-30%)、zoom 10 之 6114.9 m 顯示 6 km(-4%); 改為色條依整齊距離換算後文字恆與色條相符
+    for (let [zoom, lat, expText, label] of [
+        [12, 0, '1 km', '緯度 0 zoom 12(80px 為 1528.7 m)'],
+        [12, 24.7, '1 km', '緯度 24.7 zoom 12(80px 為 1387 m)'],
+        [10, 0, '5 km', '緯度 0 zoom 10(80px 為 6114.9 m)'],
+        [7, 23.82, '30 km', '緯度 23.82 zoom 7(80px 為 44.8 km, 預設投影為地球)'],
+    ]) {
+        it(`E2E-Z16b 文字與色條於取整邊界仍相符(${label})`, async function() {
+            await gotoExample()
+            await page.evaluate(([z, la]) => window.__getMap().jumpTo({ zoom: z, center: [121, la] }), [zoom, lat])
+            await settle()
+            let r = await assertScaleTrue(label)
+            assert.strictEqual(r.text, expText, `${label} 之文字`)
+        })
+    }
+    //緯度 × 層級網格(墨卡托): 含小於 1 m 之文字(zoom 22 緯度 60 之 80px 為 0.75 m → 0.5 m)與 km 的各整齊值; 每格文字、色條寬與實際距離皆相符
+    it('E2E-Z16c 緯度 × 層級網格: 文字、色條寬、整齊距離皆成立(含小於 1 m)', async function() {
+        await gotoExample()
+        await click('#btnMercator')
+        await settle()
+        let expects = { '60|22': '0.5 m', '60|3': '300 km', '0|16': '50 m', '24.7|8': '20 km' }
+        for (let lat of [0, 24.7, 60]) {
+            for (let zoom of [3, 8, 12.4, 16, 20, 22]) {
+                await page.evaluate(([z, la]) => window.__getMap().jumpTo({ zoom: z, center: [121, la] }), [zoom, lat])
+                await settle()
+                let tag = `緯度 ${lat} zoom ${zoom}`
+                let r = await assertScaleTrue(tag)
+                let exp = expects[`${lat}|${zoom}`]
+                if (exp) assert.strictEqual(r.text, exp, `${tag} 之文字`)
+            }
+        }
+    })
 
     it('E2E-Z17 center=[91,121] 非法值+zoom=14 同一 tick: 不崩潰, center 用預設 [23.5,121.1], zoom 生效', async function() {
         await gotoExample()
