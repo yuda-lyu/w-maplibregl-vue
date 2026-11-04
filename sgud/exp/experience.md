@@ -79,6 +79,17 @@
 - **e2e 比值斷言的容差**:`distanceTo` 取地球半徑 6371008.8 m,公式取赤道周長 40075016.686 m 換算(半徑 6378137 m),系統差 0.11%;Chrome 的 LayoutUnit 為 1/64px,`getBoundingClientRect().width` 量到 65.4062 而非 65.41;故比值取 2%、色條寬取 ±0.5px,外高 5px 與 `border-box` 另以精確斷言.
 - **變異檢驗作法(src 就地改、備份還原)**:修好後先 `cp` 備份 `scaleBar.mjs`、`WMaplibreglVue.vue` 到 `tmp/wm71/backup/`,每個變異就地以 Edit 改、跑對應測試、`cp` 備份還原,最後 `cmp` 回驗與備份位元組相同並 `git grep MUTANT` 無殘留;不使用 `git restore`/`stash`.元件層變異(拿掉 `border-box`、外高 3px)需跑 e2e(約 2 分鐘/次),純函式變異只跑 `unit-scaleBar`(2 秒).
 
+## 疊加層透明度預覽 `previewOverlayOpacity` 之實作與測試經驗(2026-11-04 wm76,Gitea #76,規則帳本 R18)
+
+- **提案數字不可照抄,量測要看情境**:提案引用「單層 `setPaintProperty` 0.4 ms、完整重套鏈 70 ms」是其應用情境.本套件範例頁(11 層)實測 `setOverlayOpacity` 含 Vue 沖刷 0.66~0.85 ms、原生 `setPaintProperty` 0.002 ms;加大情境(71 層 + `opt` 內 2 萬筆無關資料)為 36~38 ms.耗時幾乎全在 `syncBaseMapsToOpt` 寫 `opt` → deep watcher → `changeOpt` 全流程(每次呼叫 `changeOpt` 恰 1 次),與 `opt` 大小、圖層數成正比;`setOverlayOpacity` 同步段(`cloneDeep` + 寫入)僅 0.06~0.24 ms.
+- **`performance.now()` 在 headless Chromium 解析度僅 0.1 ms**:單次計時多得 0;須批次(連呼 100 次)總時間除以次數,且同步段與「含 `$nextTick` 沖刷」分開量,否則看不出 watcher 鏈的成本.
+- **提案草案(預覽時改內部 `baseMaps[i].opacity`)不採**(探測 `tmp/wm76b/probe-draft.mjs`:頁內以暫代模擬該語意,不改 src,非實跑草案碼):預覽期間內部值 0.3 ≠ `opt`,面板在下一次偶發重繪就顯示 `30%`(實測 A1);下一次無關 `opt` 變更使 `changeOpt` 以 opt 為準把內部值覆蓋回已提交值,面板回 `80%`,而 `baseMapsDataTemp` 未同步所以不重繪,地圖仍停在 0.3(A2,地圖與面板不一致).不改內部值時面板始終為 `80%`(B1、B2).不改內部值時,三條重套路徑(`updateBaseMapPaint`、`updateBaseMapsIncremental`、`applyBaseMaps`)都自 `getBaseMapOpacity(bm)` 設值,未提交的預覽自然回到已提交值,不需額外機制.注意:兩種設計在「無關 opt 變更後」地圖都停留預覽值(沒有重套就沒有回復),故預覽應以提交收尾——這是暫態語意的固有限制,README 已寫明.
+- **`style` 型別在假地圖上不建圖層、真地圖上圖層 id 帶序號尾碼**(`basemap-layer-<key>-<i>-<原id>`):`getLayer('basemap-layer-<key>')` 本就查不到,所以「`type:'style'` 回 false」與「圖層尚未加入回 false」難以區分;單元測試須用「`getLayer` 恆回真值」的假地圖才能鑑別 style/底圖判斷(第一版變異 M5b 因此存活,改用 `mapAny` 後被殺).防禦性守門(非陣列的 `baseMaps`)同理須構造「地圖對任何 id 都回有圖層」才有鑑別力.
+- **等價變異要列證據不硬殺**:M15(不略過非物件元素)存活——`null`/`undefined` 元素於 `baseMapKeys` 同樣丟錯而回 `false`,兩者輸出相同;保留守門為防禦性寫法,在帳本註明.
+- **元件層「地圖尚未載入」之測試法**:以 `wm.constructor`(元件建構子)於頁內 `new Ctor({ propsData: { opt } }).$mount(div)` 建第二個實例,`mounted` 同步建圖,緊接於掛載之後呼叫即在 `load` 之前(確定性,不靠時序);載入後同一實例再測底圖/同名/逐幀預覽,最後 `$destroy` 並移除容器.元件方法的 `!this.mapLoaded` 守門與 `getLayer`/`try-catch` 重疊(載入前 `getLayer` 查不到圖層即 `false`),故移除守門之變異為等價變異(V1),保留是為明示語意.
+- **e2e 在頁內執行含函式的斷言**:`evalWm(fn, arg)` 以 `(0, eval)('(' + fn.toString() + ')')(wm, arg)` 在頁面內執行(fn 不得引用外部變數);計數用的包裝(`syncBaseMapsToOpt`/`changeOpt`/`applyBaseMaps`/`map.setPaintProperty`)直接覆寫 vm 自有屬性與 map 實例屬性,結束後還原;`$forceUpdate` 為原型方法,覆寫為自有屬性後同樣有效.
+- **變異腳本需處理 CRLF**:本套件檔案為 CRLF,多行 `from`/`to` 須把 `\n` 轉 `\r\n`,否則「from 出現 0 次」被略過(第一次執行有 3 個變異因此未套用,改後補跑);備份在 `tmp/wm76b/orig/`、執行期間寫標記檔,被中斷時下次啟動先自備份還原.
+
 ## 建置流程(script.txt)
 
 - **`gDistApp.mjs` 會清空 `docs/examples/`**(`rollupVueToHtml` 所致),116 個 `ex-*.html` 須由其後之 `gExtractHtml.mjs` + `gDocExams.mjs` 重建.**驗證時不可只挑部分步驟跑**,否則 docs 被刪(2026-10-01 曾發生,補跑兩步後恢復).只需驗 dist 時只跑 `gDistRollupComps.mjs`(僅寫 dist).

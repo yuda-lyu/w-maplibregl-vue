@@ -53,6 +53,36 @@ let isIdle = wmaplibreglvue.$el.getAttribute('state') === 'idle'
 
 注意:`state` 只反映相機移動與投影切換,不反映資料圖層(點、線、面)的增刪改;載入階段另有 `loading` 屬性(載入中為 `true`,完成後移除)。
 
+## 連續調整疊加層透明度(`previewOverlayOpacity`)
+
+使用端自帶圖層列表與透明度滑桿時,拖曳滑桿期間要地圖即時跟著變,放開時才提交完整狀態。元件的 `setOverlayOpacity(idx, val)` 會回寫 `opt`、同步內部 `baseMaps` 並重繪面板,適合放開時提交,不適合逐幀呼叫(`opt` 愈大、圖層愈多,每次呼叫愈慢);拖曳中請改呼叫公開方法 `previewOverlayOpacity(name, val)`:只改地圖上該疊加層的繪製屬性,不回寫 `opt`、不改元件內部的 `baseMaps`、不重繪面板,可逐幀呼叫。
+
+```js
+// 拖曳中(input 事件): 以名稱定位, 即時預覽
+slider.addEventListener('input', (e) => {
+    wmaplibreglvue.previewOverlayOpacity('我的疊加層', e.target.value) // 回傳 true 表示已套用
+})
+// 放開時(change 事件): 提交 —— setOverlayOpacity 以索引定位(panelBaseMaps.baseMaps 的陣列索引)
+slider.addEventListener('change', (e) => {
+    wmaplibreglvue.setOverlayOpacity(idx, e.target.value)
+    // 或直接更新 opt.panelBaseMaps.baseMaps[idx].opacity
+})
+```
+
+| 項目 | 說明 |
+| --- | --- |
+| `name` | 疊加層名稱(`baseMaps[i].name`),須為非空字串,嚴格比對(不去空白、區分大小寫) |
+| `val` | 透明度,須為 0~1 的有效數字(數字或數字字串,如 `0.3`、`'0.3'`);`NaN`、`Infinity`、`'abc'`、`''`、`null`、布林、`'0x10'` 等非有效數字,或超出 0~1(如 `1.5`、`-0.2`)一律回傳 `false`、不改繪製(不夾限) |
+| 回傳 | `true`:已套用到地圖;`false`:未套用(不拋錯)。可由回傳值得知是否生效,逐幀呼叫不會洗版 console |
+| 回傳 `false` 的情形 | 地圖尚未載入、查無名稱、名稱對到多個條目(同名疊加層,或疊加層與底圖同名,不擇一)、名稱對到底圖(`colorShade` 非空字串者)、`type` 為 `'style'`、圖層尚未加入(如 `url` 無效而被略過)、`val` 無效或超出 0~1 |
+| 適用型別 | 疊加層(`colorShade` 空字串)的 raster、wms、vector(fill、line、fill-extrusion) |
+
+預覽是暫態:
+
+- 預覽只改地圖繪製,`opt` 與元件內部的 `baseMaps` 都不變,面板滑桿與百分比仍顯示已提交的值,直到呼叫 `setOverlayOpacity`(或更新 `opt`)提交。
+- 若預覽後未提交,而底圖因 `opt` 變更被增量更新或重新套用(可見性、順序、`opacity`、`colorFillExtrusion` 或其他欄位變更),該圖層會回到已提交的值。
+- 預覽不論該疊加層是否可見都會設定繪製屬性;之後切換為可見時,顯示的是最後一次預覽的值,因此預覽應以提交收尾。
+
 ## Installation
 
 ### Using npm(ES6 module):

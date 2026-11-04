@@ -408,7 +408,7 @@ import defTerrainMap from '../js/defTerrainMap.mjs'
 import uiRes from '../uiRes.mjs'
 import { createMap, applyProjection as _applyProjection, applyZoomRange } from '../js/mapCore.mjs'
 import { createMoveState, MOVE_STATE_MOVING } from '../js/moveState.mjs'
-import { applyBaseMaps, preloadBaseMapStyles, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, getBaseMapOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
+import { applyBaseMaps, preloadBaseMapStyles, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, previewOverlayOpacity as _previewOverlayOpacity, getBaseMapOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
 import { computeScaleBar } from '../js/scaleBar.mjs'
 import { clearTrackedByPrefix, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
@@ -459,6 +459,8 @@ function freezeCoordField(v) {
  *   - 'idle'：靜止。maplibre 的 idle 事件（相機不在移動，且目前請求之圖磚皆已載入、繪製完成）。此時 map.isMoving() 為 false 且 map.loaded() 為 true，畫面與中心、層級不再改變。
  *   - 逾時後備：相機停止 3000ms 後仍未收到 idle（圖磚逾時未載完、繪製被暫停等）仍落定為 idle；靜止時滾輪事件後 600ms 內地圖未開始移動（如層級已達上下限）亦落定為 idle；逾時當下地圖仍在移動（長動畫、持續手勢）則續等。
  *   - 只新增屬性，不改變既有外觀、行為與動畫；與 loading 屬性並存（loading 為 true 時才有該屬性，載入完成後移除）。
+ *
+ * 公開方法 previewOverlayOpacity(name, val)（連續調整疊加層透明度，如拖曳滑桿；詳見 README）：以名稱定位疊加層，只改地圖上該圖層之繪製屬性，不回寫 opt、不改元件內部 baseMaps、不重繪面板，可逐幀呼叫，回傳 true 表已套用、false 表未套用（不拋錯）；放開時以 setOverlayOpacity(idx, val) 或更新 opt.panelBaseMaps.baseMaps[i].opacity 提交。
  *
  * @vue-prop {Object} opt 輸入資料設定物件
  * @vue-prop {Array} [opt.center=[23.5, 121.1]] 輸入地圖顯示中點陣列，陣列為WGS84[緯度,經度]，兩值皆須為有限數(數字字串視為非法)且緯度在±90內，否則視為未給(用預設)，預設[23.5, 121.1]
@@ -1921,6 +1923,21 @@ export default {
 
         getMapObject() {
             return _getMapObject(this.map)
+        },
+
+        /**
+         * 連續調整疊加層透明度(如拖曳滑桿)期間之預覽: 以名稱定位, 只改地圖上該疊加層之繪製屬性,
+         * 不回寫opt、不改元件內部baseMaps、不重繪面板, 可逐幀呼叫(每次僅對地圖設一次paint屬性)。
+         * 使用情境: 拖曳中(input事件)呼叫本方法使地圖即時跟著變, 放開時(change事件)再以setOverlayOpacity(idx, val)或更新opt.panelBaseMaps.baseMaps[i].opacity提交完整狀態。
+         * 預覽是暫態: 未提交而底圖因opt變更被增量更新或重套時, 圖層回到已提交值; 面板滑桿與百分比在提交前仍顯示已提交值。
+         *
+         * @param {String} name 輸入疊加層名稱(baseMaps[i].name), 須為非空字串, 嚴格比對(不去空白、區分大小寫)
+         * @param {Number|String} val 輸入透明度, 須為0~1之有效數字(數字或數字字串, 如0.3、'0.3'); NaN、Infinity、'abc'、''、null、布林等非有效數字, 或超出0~1(如1.5、-0.2)皆回傳false且不改繪製(不夾限)
+         * @returns {Boolean} 回傳是否已套用: true為已套用至地圖; false為未套用(不拋錯)——地圖尚未載入、查無名稱、名稱對到多個條目(同名疊加層, 或疊加層與底圖同名, 不擇一)、名稱對到底圖(colorShade非空字串)、type為'style'、圖層尚未加入(如url無效被略過)、val無效或超出0~1
+         */
+        previewOverlayOpacity(name, val) {
+            if (!this.map || !this.mapLoaded) return false //地圖尚未載入(圖層尚未加入)
+            return _previewOverlayOpacity(this.map, get(this, 'panelBaseMaps.baseMaps', []), name, val)
         },
 
         panTo(latLng, opt = {}) {

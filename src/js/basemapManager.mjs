@@ -10,6 +10,7 @@ import isEqual from 'lodash-es/isEqual.js'
 import isobj from 'wsemi/src/isobj.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import isnum from 'wsemi/src/isnum.mjs'
+import isenum from 'wsemi/src/isenum.mjs'
 import isarr from 'wsemi/src/isarr.mjs'
 import cdbl from 'wsemi/src/cdbl.mjs'
 
@@ -375,6 +376,51 @@ export function setOverlayOpacity(map, baseMaps, idx, val) {
     }
     else {
         map.setPaintProperty(id, 'raster-opacity', bm.opacity)
+    }
+}
+
+
+/**
+ * 連續調整疊加圖層透明度(如拖曳滑桿)期間之輕量預覽(R18): 以名稱定位, 只對地圖上該圖層設一次 paint 屬性,
+ * 不改 baseMaps(元件內部值與 opt 皆不變)、不取 style、不改版面, 可逐幀呼叫; 調整結束後由呼叫端以 setOverlayOpacity 提交。
+ * 預覽值不寫入 baseMaps, 故底圖被增量更新或重套(updateBaseMapPaint/applyBaseMaps)時, 圖層回到已提交值。
+ * 回傳 true 表已套用; 以下皆回傳 false 且不改繪製、不拋錯:
+ * map 缺、baseMaps 非陣列(或含 null/undefined 元素)、name 非非空字串、查無名稱、名稱對到多個條目(收嚴, 不擇一; 含疊加層與底圖同名)、
+ * 對到底圖(colorShade 非空字串)、type 為 'style'(各層自帶 opacity)、圖層尚未加入(如 url 無效而被略過)、val 非有效數字或超出 0~1、地圖方法拋錯。
+ * @param {Object} map - MapLibre 地圖實例
+ * @param {Array} baseMaps - panelBaseMaps.baseMaps
+ * @param {String} name - 疊加層名稱(baseMaps[i].name), 嚴格比對
+ * @param {Number|String} val - 透明度, 須為 0~1 之有效數字(數字或數字字串)
+ * @returns {Boolean} 是否已套用
+ */
+export function previewOverlayOpacity(map, baseMaps, name, val) {
+    if (!map || !isarr(baseMaps) || !isestr(name)) return false
+    if (!isenum(val)) return false //有效數字(數字或數字字串, 不收 NaN/Infinity/'0x10'/標記字串/包裝物件/布林)
+    let v = Number(val) //檢測之值即使用之值: 其後只用轉換值, 不把字串交給 maplibre
+    if (v < 0 || v > 1) return false //必須參數超出範圍不夾限, 回 false(與 opt 鍵之夾限不同)
+    try {
+        let idx = -1
+        let n = 0
+        each(baseMaps, (e, k) => {
+            if (isobj(e) && e.name === name) {
+                n++; idx = k
+            }
+        })
+        if (n !== 1) return false //查無名稱, 或對到多個條目(不擇一)
+        let bm = baseMaps[idx]
+        if (isestr(bm.colorShade) || bm.type === 'style') return false //僅疊加層; style 型別不支援整組透明度
+        let id = `basemap-layer-${baseMapKeys(baseMaps)[idx]}`
+        if (!map.getLayer(id)) return false //圖層尚未加入
+        let prop = 'raster-opacity'
+        if (bm.type === 'vector') {
+            let lt = bm.layerType || 'fill'
+            prop = lt === 'fill-extrusion' ? 'fill-extrusion-opacity' : (lt === 'line' ? 'line-opacity' : 'fill-opacity')
+        }
+        map.setPaintProperty(id, prop, v)
+        return true
+    }
+    catch (e) {
+        return false //地圖尚未載入完成(style 未就緒)或陣列含無效元素等: 不外拋
     }
 }
 
