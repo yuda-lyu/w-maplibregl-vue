@@ -405,7 +405,7 @@ import defTerrainMap from '../js/defTerrainMap.mjs'
 import uiRes from '../uiRes.mjs'
 import { createMap, applyProjection as _applyProjection, applyZoomRange } from '../js/mapCore.mjs'
 import { createMoveState, MOVE_STATE_MOVING } from '../js/moveState.mjs'
-import { applyBaseMaps, preloadBaseMapStyles, applyTerrain, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, previewOverlayOpacity as _previewOverlayOpacity, getBaseMapOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
+import { applyBaseMaps, preloadBaseMapStyles, applyTerrain, updateTerrainExaggeration, switchBaseMap as _switchBaseMap, toggleOverlayVisible as _toggleOverlayVisible, setOverlayOpacity as _setOverlayOpacity, previewOverlayOpacity as _previewOverlayOpacity, getBaseMapOpacity, updateBaseMapPaint, isBaseMapsPaintOnlyDiff, isBaseMapsStructuralDiff, updateBaseMapsIncremental } from '../js/basemapManager.mjs'
 import { computeBasicOpt, computePanelBaseMaps, computePanelCompassRose, computePanelCompass3d, computePanelLabels, computePanelItems, computePanelZoom, computePanelScale, computePanelLegends, computeClusterOpts } from '../js/configProcessor.mjs'
 import { computeScaleBar } from '../js/scaleBar.mjs'
 import { clearTrackedByPrefix, buildItemsList, countVisible } from '../js/layerVisibility.mjs'
@@ -694,7 +694,6 @@ export default {
             // 面板設定
             panelBackgroundColor: 'rgba(255,255,255,0.95)',
             panelBaseMaps: { show: true, position: 'topleft', baseMaps: [], style: {}, stopWheel: false },
-            panelBaseMapsTemp: {},
             panelCompassRose: { show: false, position: 'topright', size: 120, withPanel: false, iconSrc: null, iconSrcLight: uiRes.iconCompassRoseLight, iconSrcDark: uiRes.iconCompassRoseDark },
             panelCompassRoseTemp: {},
             panelCompass3d: { show: true, position: 'topright', size: 44 },
@@ -1199,7 +1198,6 @@ export default {
             vo.terrainMapTemp = cloneDeep(result.terrainMap)
             vo.terrainMap = result.terrainMap
             vo.panelBaseMaps = result.panelBaseMaps
-            vo.panelBaseMapsTemp = cloneDeep(result.panelBaseMaps)
             if (result.baseMapsChanged) {
                 let prevBaseMaps = vo.baseMapsDataTemp //更新前的上次套用值, 供 paint-only 判斷
                 let nextBaseMaps = result.panelBaseMaps.baseMaps
@@ -1211,7 +1209,7 @@ export default {
                         each(nextBaseMaps, (bm, k) => updateBaseMapPaint(vo.map, nextBaseMaps, k))
                     }
                     else if (!isBaseMapsStructuralDiff(prevBaseMaps, nextBaseMaps)) {
-                        //僅順序/可見性(可含 paint)變更: 增量套用(setPaintProperty + setLayoutProperty + moveLayer),
+                        //僅順序/可見性/名稱(可含 paint)變更: 增量套用(setPaintProperty + setLayoutProperty + moveLayer),
                         //不重建 layer/source → 不重抓圖磚、不擾動資料圖層 z-order(無閃爍)
                         updateBaseMapsIncremental(vo.map, nextBaseMaps)
                     }
@@ -1229,7 +1227,10 @@ export default {
                     }
                 }
             }
-            if (result.terrainChanged && vo.map && vo.mapLoaded) vo.applyTerrain()
+            if (result.terrainChanged && vo.map && vo.mapLoaded) {
+                //僅倍率變更: 同來源就地 setTerrain(不移除/重建 DEM 來源 → 不重抓 DEM, hillshade 不動); 無法就地(未啟用地形、來源不在、拋錯)才整組重套
+                if (!(result.terrainExaggerationOnly && updateTerrainExaggeration(vo.map, vo.terrainMap))) vo.applyTerrain()
+            }
         },
 
         processPanelCompassRose() {

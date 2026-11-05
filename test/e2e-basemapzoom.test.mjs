@@ -3,7 +3,7 @@
 // 規格句(src/components/WMaplibreglVue.vue 之 @vue-prop baseMaps[i].maxzoom, 以下代稱 J-max):
 //   「即服務實際提供圖磚之最深圖磚層級(非地圖顯示層級: 256px圖磚於地圖層級z時約請求z+1級),
 //    超過時改以該級圖磚放大顯示, 避免請求不存在之層級致圖層空白並報錯」「不給則沿用maplibre預設」
-// 執行期變更(CLAUDE_rulebook.md R8, 以下代稱 J-diff): source 欄位變更走完整重建而即時生效。
+// 執行期變更(sgud/rule/rulebook.md R8, 以下代稱 J-diff): source 欄位變更走完整重建而即時生效。
 //
 // 真實 user path(6 步):
 //   1. 開首頁(App.vue 範例選單)
@@ -20,7 +20,7 @@
 //
 // 圖磚: 範例頁以 maplibregl.addProtocol('e2ezlim') 供應 1x1 純色 PNG, 只提供 0~18 級(19 級以上回失敗), 永不連外。
 // 斷言以使用者可觀察為主(取樣區顏色比例、頁面計數文字), style 快照僅作補強。
-// 標準圖政策: 依 CLAUDE_rulebook.md〈e2e 映射〉無跨 run 標準圖(當次區域取樣)。無 i18n, 單一變體。每個 it() 各自 new browser。
+// 標準圖政策: 依 sgud/rule/rulebook.md〈e2e 映射〉無跨 run 標準圖(當次區域取樣)。無 i18n, 單一變體。每個 it() 各自 new browser。
 //
 // 重要流程(spec bullets):
 //   - E2E-A 服務上限層級顯示: 勾選「紅 maxzoom:18」→ 地圖 18 級時取樣區顯示紅色(以 18 級圖磚放大);

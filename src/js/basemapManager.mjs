@@ -238,6 +238,35 @@ export function applyBaseMaps(map, baseMaps) {
 }
 
 
+// 地形高度誇張倍率之單一解讀(整組重套與就地更新共用): 數字或數字字串取其值, 非數值視為未給 → 預設 1.5
+function getTerrainExaggeration(tm) {
+    return isnum(get(tm, 'exaggeration')) ? cdbl(tm.exaggeration) : 1.5
+}
+
+
+/**
+ * 就地更新 3D 地形倍率(僅倍率變更時用): 以同一來源 map.setTerrain 一次, 不移除/重建 DEM 來源 → 不重抓 DEM、hillshade 不動。
+ * 目前未啟用地形(無 terrain-src 來源或地形非指向它)或 setTerrain 拋錯時回 false, 由呼叫端改走 applyTerrain 整組重套。
+ * @param {Object} map - MapLibre 地圖實例
+ * @param {Object} terrainMap - 地形配置物件(取其 exaggeration)
+ * @returns {Boolean} true 表已就地更新; false 表無法就地更新(呼叫端須整組重套)
+ */
+export function updateTerrainExaggeration(map, terrainMap) {
+    if (!map || !isobj(terrainMap)) return false
+    if (!map.getSource('terrain-src')) return false
+    let cur = map.getTerrain ? map.getTerrain() : null
+    if (!isobj(cur) || cur.source !== 'terrain-src') return false
+    try {
+        map.setTerrain({ source: 'terrain-src', exaggeration: getTerrainExaggeration(terrainMap) })
+    }
+    catch (e) {
+        console.error('[basemapManager] updateTerrainExaggeration setTerrain error:', e)
+        return false
+    }
+    return true
+}
+
+
 /**
  * 套用 3D 地形（清除舊地形後重新設定）
  * @param {Object} map - MapLibre 地圖實例
@@ -274,7 +303,7 @@ export function applyTerrain(map, terrainMap, trackedLayerIds) {
         console.error('[basemapManager] applyTerrain addSource error:', e); return
     }
     try {
-        map.setTerrain({ source: 'terrain-src', exaggeration: isnum(tm.exaggeration) ? cdbl(tm.exaggeration) : 1.5 })
+        map.setTerrain({ source: 'terrain-src', exaggeration: getTerrainExaggeration(tm) })
     }
     catch (e) {
         console.error('[basemapManager] applyTerrain setTerrain error:', e)
@@ -479,13 +508,13 @@ export function isBaseMapsPaintOnlyDiff(prev, next) {
 }
 
 
-// 不需重建即可就地處理的欄位: paint(colorFillExtrusion/opacity) 與顯隱(visible)
-const BASEMAP_PAINT_STATE = ['colorFillExtrusion', 'opacity', 'visible']
+// 不需重建即可就地處理的欄位: paint(colorFillExtrusion/opacity)、顯隱(visible)與名稱(name, 純面板顯示; 圖層 id 由 baseMapKey 衍生且不含 name)
+const BASEMAP_PAINT_STATE = ['colorFillExtrusion', 'opacity', 'visible', 'name']
 
 
 /**
  * 判斷新舊 baseMaps 是否有「結構性變更」(新增/刪除/url/type/layer/layerType/colorShade 等)。
- * false → 僅順序/可見性/paint 差異, 可走增量(updateBaseMapsIncremental), 不重建、不重抓圖磚;
+ * false → 僅順序/可見性/paint/名稱差異, 可走增量(updateBaseMapsIncremental), 不重建、不重抓圖磚;
  * true → 有結構性變更, 需完整重套 applyBaseMaps。
  * @param {Array} prev - 上次套用的 baseMaps
  * @param {Array} next - 本次 baseMaps
@@ -506,7 +535,7 @@ export function isBaseMapsStructuralDiff(prev, next) {
 
 
 /**
- * 「僅順序/可見性/paint 變更」時的增量套用: 就地更新 paint 與 visibility,
+ * 「僅順序/可見性/paint/名稱變更」時的增量套用: 就地更新 paint 與 visibility,
  * 並用 moveLayer 將疊加層依新陣列序重排至「資料圖層之下、底圖之上」。
  * 完全不 remove/add source(不重抓圖磚), 不擾動資料圖層 z-order(無閃爍)。
  * @param {Object} map

@@ -1,7 +1,7 @@
 // unit: 圖台縮放範圍(opt.minZoom/maxZoom)與 opt.zoom/center 正規化、執行期範圍套用
 //
 // 以假 map 驗證 applyZoomRange(不需瀏覽器); 每條 assertion 註明對應之規格句(src/components/WMaplibreglVue.vue 之 @vue-prop, 以下代稱)與
-// CLAUDE_rulebook.md 規則:
+// sgud/rule/rulebook.md 規則:
 //   J-zoom  opt.zoom: 「可給數字或數字字串, 非數值視為未給(預設6)」「元件不另夾值, 超出範圍者由地圖拉入範圍並以地圖實際層級寫回」(R11、R13)
 //   J-min   opt.minZoom: 「預設0, 夾在0~24, 可給數字或數字字串, 非數值或非有限數視為未給, 大於maxZoom時忽略minZoom並console.warn」(R11)
 //   J-max   opt.maxZoom: 「預設22, 夾在0~24, 給法同minZoom」(R11)

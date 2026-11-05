@@ -8,6 +8,7 @@ import cloneDeep from 'lodash-es/cloneDeep.js'
 import size from 'lodash-es/size.js'
 import isNumber from 'lodash-es/isNumber.js'
 import isEqual from 'lodash-es/isEqual.js'
+import omit from 'lodash-es/omit.js'
 import isbol from 'wsemi/src/isbol.mjs'
 import isstr from 'wsemi/src/isstr.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
@@ -36,7 +37,7 @@ export function buildPanelStyle(p) {
  * @param {Array} currentBaseMapsDataTemp - 上次底圖資料快照（用於 diff）
  * @param {Array} defBaseMapsData - 預設底圖配置
  * @param {Object} defTerrainMapData - 預設地形配置
- * @returns {{ panelBaseMaps, terrainMap, baseMapsChanged, terrainChanged }}
+ * @returns {{ panelBaseMaps, terrainMap, baseMapsChanged, terrainChanged, terrainExaggerationOnly }}
  */
 export function computePanelBaseMaps(opt, currentBaseMaps, currentTerrainMapTemp, currentBaseMapsDataTemp, defBaseMapsData, defTerrainMapData) {
     let def = { show: true, position: 'topleft', baseMaps: [], stopWheel: false }
@@ -55,10 +56,12 @@ export function computePanelBaseMaps(opt, currentBaseMaps, currentTerrainMapTemp
     let tm = get(p, 'terrainMap', null)
     if (!isobj(tm)) tm = cloneDeep(defTerrainMapData)
     let terrainChanged = !isEqual(currentTerrainMapTemp, tm)
+    //僅 exaggeration 變更(其餘欄位完全相同): 呼叫端可同來源就地更新倍率, 不整組重套(不重抓 DEM); 首次(無上次快照)或其餘欄位有變者為 false
+    let terrainExaggerationOnly = terrainChanged && isobj(currentTerrainMapTemp) && isEqual(omit(currentTerrainMapTemp, 'exaggeration'), omit(tm, 'exaggeration'))
 
     let baseMapsChanged = !isEqual(currentBaseMapsDataTemp, p.baseMaps)
 
-    return { panelBaseMaps: p, terrainMap: tm, baseMapsChanged, terrainChanged }
+    return { panelBaseMaps: p, terrainMap: tm, baseMapsChanged, terrainChanged, terrainExaggerationOnly }
 }
 
 

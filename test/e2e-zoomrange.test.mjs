@@ -1,6 +1,6 @@
 // e2e: 圖台縮放範圍(opt.minZoom/maxZoom)、opt↔地圖寫回迴圈、center 驗證、比例尺文字之畫面行為
 //
-// 規格句(src/components/WMaplibreglVue.vue 之 @vue-prop, 以下代稱; 規則見 CLAUDE_rulebook.md R11/R12/R13/R15):
+// 規格句(src/components/WMaplibreglVue.vue 之 @vue-prop, 以下代稱; 規則見 sgud/rule/rulebook.md R11/R12/R13/R15):
 //   J-max   opt.maxZoom 預設22, 夾在0~24; 「使用者縮放、縮放按鈕、opt.zoom與API皆受此限制」「可於執行期變更(須於opt預先宣告此鍵)」
 //   J-min   opt.minZoom 預設0, 夾在0~24; 「大於maxZoom時忽略minZoom並console.warn」
 //   J-zoom  opt.zoom 「元件不另夾值, 超出範圍者由地圖拉入範圍, 使用者縮放、縮放按鈕或API縮放後會把地圖實際層級寫回本欄位
@@ -27,7 +27,7 @@
 // 「無彈回」以 zoomend 事件序列單調為斷言(終值相同而過程彈回者只看終值測不出)。
 //
 // 圖磚: 範例頁以 maplibregl.addProtocol('e2ezr') 供應單色圖磚, 永不連外。
-// 標準圖政策: 依 CLAUDE_rulebook.md〈e2e 映射〉無跨 run 標準圖(語意斷言)。無 i18n, 單一變體。每個 it() 各自 new browser。
+// 標準圖政策: 依 sgud/rule/rulebook.md〈e2e 映射〉無跨 run 標準圖(語意斷言)。無 i18n, 單一變體。每個 it() 各自 new browser。
 //
 // 重要流程(spec bullets):
 //   - E2E-Z1  預設上限 22: 自 17 級連按放大鈕 4 次依序 18、19、20、21, 無彈回(issue #3); getMaxZoom()=22

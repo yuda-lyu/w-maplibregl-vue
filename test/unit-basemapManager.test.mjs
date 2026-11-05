@@ -8,9 +8,9 @@
 //   J-url  baseMaps[i].url: 「url非有效字串之條目會被略過(console.warn)且不影響其他條目」
 //   J-tm   terrainMap.terrainSource.maxzoom: 「給法同baseMaps[i].maxzoom」; terrainSource 無 minzoom 欄位;
 //          hillshadeSource: 「須同時給有效之terrainSource才生效, url與terrainSource.url相同時共用地形來源」
-//   J-def  CLAUDE_rulebook.md R9: 預設底圖 OpenTopoMap 帶 maxzoom 17(服務只提供至 17 級); OpenStreetMap 帶 maxzoom 19(z>=20 回 400)、Mapbox 帶 maxzoom 22(TileJSON 宣告)
+//   J-def  sgud/rule/rulebook.md R9: 預設底圖 OpenTopoMap 帶 maxzoom 17(服務只提供至 17 級); OpenStreetMap 帶 maxzoom 19(z>=20 回 400)、Mapbox 帶 maxzoom 22(TileJSON 宣告)
 //   J-opa  baseMaps[i].opacity: 「透明度數字(0~1), 可給數字或數字字串, 超出範圍夾限, 非數值視為未給, raster與wms預設1、vector預設0.8(面板滑桿與實繪一致),
-//          type為'style'時不支援(各層自帶opacity)」(CLAUDE_rulebook.md R14)
+//          type為'style'時不支援(各層自帶opacity)」(sgud/rule/rulebook.md R14)
 //   J-diff isBaseMapsPaintOnlyDiff/isBaseMapsStructuralDiff 之函式說明(僅 paint → P1; 僅順序/可見性/paint → 增量; 其餘 → 完整重建)
 import assert from 'assert'
 import { applyBaseMaps, applyTerrain, preloadBaseMapStyles, isBaseMapsStructuralDiff, isBaseMapsPaintOnlyDiff, getBaseMapOpacity, updateBaseMapPaint } from '../src/js/basemapManager.mjs'

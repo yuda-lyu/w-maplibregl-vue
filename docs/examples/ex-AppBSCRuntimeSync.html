@@ -380,9 +380,15 @@
           "/e2e-icon-fast.png"
         );
       },
-      //調整地形參數(terrainChanged 路徑): 供驗證 runtime 重套 terrain 後 hillshade 之疊序
+      //調整地形參數(terrainChanged 整組重套路徑): 供驗證 runtime 重套 terrain 後 hillshade 之疊序
+      //僅改 exaggeration 會走就地更新(同來源 setTerrain, 不重建 hillshade; 見 e2e-diffpath E2E-D3), 故一併改 hillshadeExaggeration 使其走整組重套
       tuneTerrain: function() {
         this.$set(this.opt.panelBaseMaps.terrainMap, "exaggeration", 2);
+        this.$set(
+          this.opt.panelBaseMaps.terrainMap,
+          "hillshadeExaggeration",
+          0.7
+        );
       },
       //反轉底圖清單順序(同 key 集合之非結構性變更, 走增量路徑): 供驗證 hillshade 與疊加層之疊序
       reorderBasemaps: function() {

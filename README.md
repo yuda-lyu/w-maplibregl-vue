@@ -85,6 +85,42 @@ slider.addEventListener('change', (e) => {
 - 若預覽後未提交,而底圖因 `opt` 變更被增量更新或重新套用(可見性、順序、`opacity`、`colorFillExtrusion` 或其他欄位變更),該圖層會回到已提交的值。
 - 預覽不論該疊加層是否可見都會設定繪製屬性;之後切換為可見時,顯示的是最後一次預覽的值,因此預覽應以提交收尾。
 
+## `opt` 位姿契約(`opt.zoom`、`opt.center` 會被寫回)
+
+`opt` 不只是輸入:元件會把地圖**目前**的層級與中心寫回傳入的 `opt` 物件。使用者拖曳、滾輪縮放等操作讓地圖停下時(元件於 maplibre 的 `zoomend`、`moveend` 等事件寫回),`opt.zoom` 被寫成實際層級,`opt.center` 被寫成 `[緯度, 經度]`。反過來,對 `opt.zoom`、`opt.center` 賦值,地圖就移到該位姿,且之後每次 `opt` 有變更,元件都以 `opt` 上的位姿值為準。下文標「實測」者,皆在本套件 1.0.71 以 Chromium 實測;其餘為程式碼行為的說明。
+
+使用端須知:
+
+- 要讓父層的 watcher 或畫面收到位姿寫回、並讓賦值能驅動地圖,`opt` 須**預先宣告** `zoom`、`center` 鍵(Vue 2 的響應式只涵蓋宣告時已存在的鍵;未宣告時位姿仍會寫進 `opt`,但不是響應式,見 T7)。
+- 這個物件由元件寫入:**不可凍結**(T4),也不可由多個元件實例共用(T5)。
+- 位姿主要由 `opt.zoom`、`opt.center` 決定;改面板文字、資料集等欄位不會移動地圖(實測:平移後改 `opt.panelLabels.title` 並整組換掉 `opt.pointSets`,位姿不變)。另外,`opt.minZoom`、`opt.maxZoom` 把現行層級拉入新範圍、`opt.projection` 切換時,層級或中心也可能被調整並寫回(見 `opt.zoom`、`opt.minZoom` 的 JSDoc 說明)。
+
+| # | 情境 | 實際行為(實測) | 正確作法 |
+| --- | --- | --- | --- |
+| T1 | 使用者平移後,父層以**新物件**取代 `opt`,新 `opt` 帶有 `center`、`zoom` | 地圖跳到新 `opt` 的位姿(實測:自平移後的 24.5°N、122°E、z9 跳回 23.5°N、121.1°E、z7) | 要保留使用者視角:就地修改既有 `opt` 的欄位而不換物件(實測位姿不變);必須換整個物件時,新物件帶入目前的 `opt.center`、`opt.zoom`(實測位姿不變);要回到初始視角,就是這個行為 |
+| T2 | 同 T1,但新 `opt` 不帶 `center`、`zoom` | 跳到預設位姿(實測:`center` 為 `[23.5, 121.1]`、`zoom` 為 6);未給的鍵用預設(見 `opt.center`、`opt.zoom` 的 JSDoc 說明) | 同 T1:帶入目前的 `opt.center`、`opt.zoom` |
+| T3 | 父層 deep watch 整個 `opt` | 每次平移或縮放結束都觸發一次(實測:5 次 `jumpTo` 觸發 5 次;真滑鼠一次拖曳、一次滾輪各觸發 1 次) | 只 watch 需要的欄位(實測 watch `opt.panelLabels`,5 次平移觸發 0 次);要追蹤視角就 watch `opt.zoom`、`opt.center` |
+| T4 | `opt` 被 `Object.freeze` | 位姿寫回時拋出錯誤(實測 Chromium 訊息:`Cannot assign to read only property 'center'`);`opt.center` 與元件內部記錄的中心停在舊值,地圖卻已移動 | 不要凍結 `opt`;大資料只凍結資料集內的陣列(見下節) |
+| T5 | 兩個元件實例共用同一個 `opt` | 平移其中一個,另一個跟著移動(寫回改了共用的 `opt`,另一個再依 `opt` 推地圖) | 每個實例各用自己的 `opt` |
+| T6 | 把 `opt.center`、`opt.zoom` 當讀值,並賦值重設視角 | **可依賴的行為**:賦值後地圖移到該位姿,`opt` 同步為新值(實測:平移後同時賦回初始 `center`、`zoom`,地圖回到初始位姿);同一次賦值 `center` 與 `zoom` 兩者皆生效(`e2e-zoomrange` 的 E2E-Z8 保護就地賦值,E2E-Z8b 保護整個換新 `opt`);只賦 `center` 以平移動畫移動,只賦 `zoom` 不經動畫(實測賦值後 30 ms:前者仍在移動、後者已靜止) | 這是支援的用法,不需改 |
+| T7 | `opt` 沒有預先宣告 `zoom`、`center` 鍵 | 位姿仍會寫進 `opt`,但不是響應式:父層 watcher 不觸發(實測 0 次),其後賦值 `opt.zoom = 12` 無效(地圖仍在 z9) | 在 `opt` 預先宣告 `zoom`、`center`(實測:宣告後平移會觸發 watcher,賦值 `opt.zoom = 12` 地圖到 z12) |
+| T8 | 只改 `opt.center` 到高緯度 | 地球投影(`opt.projection` 為 `'globe'`,或未給且層級 ≤ 8 的自動投影)下,地圖依緯度調整層級,並把調整後的層級寫回 `opt.zoom`(實測:`zoom` 6、中心改 60°N,未給與 `'globe'` 皆由 6 變約 5.12);`'mercator'` 下不變(實測 6 仍為 6) | 以 `opt.zoom` 取得實際層級,不要假設它不變;要固定層級就用 `projection: 'mercator'` |
+
+### 大資料:凍結 `points` 省走訪成本
+
+Vue 2 會走訪 `opt` 的全部內容以建立響應式,點越多,每次 `opt` 有變更(含每次平移的位姿寫回)走訪越久。資料集的 `points` 陣列與各點不需要響應式時,以 `Object.freeze` 凍結陣列與各點,Vue 就會略過:
+
+```js
+let points = rows.map((r) => Object.freeze({ latLng: [r.lat, r.lng], title: r.name, msg: r.desc }))
+opt.pointSets[0].points = Object.freeze(points) // 資料更新時整組換新
+```
+
+實測(Chromium、20,000 點、單一底圖):無關 `opt` 變更後的 Vue 更新,中位數由約 20 ms 降到約 1 ms,掛載由約 570 ms 降到約 440 ms(單次量測,數值依機器而異);畫面同樣繪出 20,000 筆。另以 300 點實測:凍結後平移寫回與面板顯隱照常。限制:
+
+- 資料須整組換新:把 `points` 換成新的凍結陣列可正常重繪(實測 300 筆換成 301 筆);就地 `push` 凍結陣列會拋 `TypeError`。
+- **不可凍結資料集物件本身**(如 `Object.freeze(opt.pointSets[0])`):面板的顯隱勾選框會失效——勾選框的狀態會變,但圖層不隱藏、`visible` 也不寫入 `opt`(實測)。
+- 以上以 `pointSets` 實測;其他資料集(線、面等)未實測。
+
 ## Installation
 
 ### Using npm(ES6 module):

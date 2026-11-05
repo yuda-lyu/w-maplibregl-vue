@@ -1,4 +1,4 @@
-// e2e: 底圖疊加層 opacity 之面板顯示與實繪一致(預設值與值域單一擁有者, CLAUDE_rulebook.md R14)
+// e2e: 底圖疊加層 opacity 之面板顯示與實繪一致(預設值與值域單一擁有者, sgud/rule/rulebook.md R14)
 //
 // 規格句(src/components/WMaplibreglVue.vue 之 @vue-prop baseMaps[i].opacity, 以下代稱 J-opa):
 //   「透明度數字(0~1), 可給數字或數字字串, 超出範圍夾限, 非數值視為未給, raster與wms預設1、vector預設0.8(面板滑桿與實繪一致),
@@ -15,7 +15,7 @@
 // 按鈕全清單比對(範例頁): [主選單、子選單、11 個疊加層 checkbox、10 個透明度滑桿〔style 型不渲染〕、縮放 +/- 按鈕、地圖 canvas]。
 //   covered: 主選單、子選單、vector fill 之 checkbox 與滑桿(E2E-O4)。uncovered(非本 spec 標的): 其餘 checkbox(顯隱屬 AppPBM* 生態)、縮放按鈕與 canvas。
 //
-// 標準圖政策: 依 CLAUDE_rulebook.md〈e2e 映射〉無跨 run 標準圖(語意斷言)。無 i18n, 單一變體。每個 it() 各自 new browser。
+// 標準圖政策: 依 sgud/rule/rulebook.md〈e2e 映射〉無跨 run 標準圖(語意斷言)。無 i18n, 單一變體。每個 it() 各自 new browser。
 //
 // 重要流程(spec bullets):
 //   - E2E-O1 未給 opacity: raster、wms 面板 1/100%、實繪 1; vector fill/line/fill-extrusion 面板 0.8/80%、實繪 0.8; 明給 0.5 → 0.5/50%/0.5
