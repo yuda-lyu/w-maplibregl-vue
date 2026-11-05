@@ -48,8 +48,6 @@
             <pre class="prettyprint source linenums"><code>&lt;template>
     &lt;div
         style="position:relative; display:inline-block;"
-        v-domresize
-        @domresize="resize"
         :loading="loading"
         :state="state"
     >
@@ -448,7 +446,6 @@ import isnum from 'wsemi/src/isnum.mjs'
 import isearr from 'wsemi/src/isearr.mjs'
 import dig from 'wsemi/src/dig.mjs'
 import debounce from 'wsemi/src/debounce.mjs'
-import domResize from 'w-component-vue/src/js/domResize.mjs'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import defBaseMaps from '../js/defBaseMaps.mjs'
 import defTerrainMap from '../js/defTerrainMap.mjs'
@@ -502,7 +499,7 @@ function freezeCoordField(v) {
  *   - Vue 特定操作（$nextTick / $refs / $forceUpdate）
  *
  * 根節點 state 屬性（唯讀，圖台移動狀態，比照 w-component-vue WDrawer 之 state 語彙，供使用端與 e2e 偵測圖台是否已靜止，讀法如 this.$refs.wm.$el.getAttribute('state')，e2e 以 Playwright 等候根節點 [state="idle"] 即可，詳見 README）：
- *   - 'moving'：移動中。初次載入完成（首次 idle）前亦為此值；其後自 maplibre 的 movestart 起至 idle 止，涵蓋 panTo/centerTo、easeTo、flyTo、jumpTo、zoomTo、縮放按鈕、滾輪縮放、拖曳、羅盤、容器尺寸改變(resize)與投影切換（opt.projection 變更、自動投影於層級8的切換、使用端經 getMapObject().setProjection 切換；投影切換可無相機移動，以 maplibre 的 projectiontransition 標記）；相機停止後仍等圖磚載入與繪製完成才轉為 idle，故此時 map.isMoving() 已為 false 而值仍可為 moving；靜止時收到滾輪事件即轉為 moving（搶在 movestart 之前，maplibre 滾輪縮放自首個 wheel 事件到 movestart 約有 40~80ms）。
+ *   - 'moving'：移動中。初次載入完成（首次 idle）前亦為此值；其後自 maplibre 的 movestart 起至 idle 止，涵蓋 panTo/centerTo、easeTo、flyTo、jumpTo、zoomTo、縮放按鈕、滾輪縮放、拖曳、羅盤、容器尺寸改變(resize)與投影切換（opt.projection 變更、自動投影於層級8的切換、使用端經 getMapObject().setProjection 切換；投影切換可無相機移動，以 maplibre 的 projectiontransition 標記）；相機停止後仍等圖磚載入與繪製完成才轉為 idle，故此時 map.isMoving() 已為 false 而值仍可為 moving；靜止時收到滾輪事件即轉為 moving（搶在 movestart 之前，maplibre 滾輪縮放自首個 wheel 事件到 movestart 約有 40~80ms）。容器尺寸改變由 maplibre 內建 trackResize 單一來源處理，一次尺寸改變只發一組 movestart/resize/moveend；state 為 Vue 響應式屬性（微任務更新），moving → idle 若於同一 JS 任務內完成（如 resize 後同步重繪即達 idle）則被 Vue 合併，屬性不曾顯示 moving（此時地圖已靜止，維持 idle 即為真），使用端請等待 idle，不要等待 moving 出現。
  *   - 'idle'：靜止。maplibre 的 idle 事件（相機不在移動，且目前請求之圖磚皆已載入、繪製完成）。此時 map.isMoving() 為 false 且 map.loaded() 為 true，畫面與中心、層級不再改變。
  *   - 逾時後備：相機停止 3000ms 後仍未收到 idle（圖磚逾時未載完、繪製被暫停等）仍落定為 idle；靜止時滾輪事件後 600ms 內地圖未開始移動（如層級已達上下限）亦落定為 idle；逾時當下地圖仍在移動（長動畫、持續手勢）則續等。
  *   - 只新增屬性，不改變既有外觀、行為與動畫；與 loading 屬性並存（loading 為 true 時才有該屬性，載入完成後移除）。
@@ -699,9 +696,6 @@ function freezeCoordField(v) {
  * @vue-prop {Number} [opt.imageSets[i].opacity=1] 輸入第i個影像集合的透明度數字，範圍0~1，超出範圍將夾限，預設1
  */
 export default {
-    directives: {
-        domresize: domResize(),
-    },
     components: {
         CmpPopupResizable,
     },
@@ -832,6 +826,7 @@ export default {
     mounted() {
         let vo = this
         vo.initMap()
+        window.addEventListener('resize', vo.onWindowResize)
         let wo = { immediate: true, deep: true }
         each(['imageSets'], (v) => {
             vo.wats.push(vo.$watch(`opt.${v}`, vo.changeImageSetsDebounce, wo))
@@ -853,6 +848,7 @@ export default {
         })
     },
     beforeDestroy() {
+        window.removeEventListener('resize', this.onWindowResize)
         each(this.wats, (w) => {
             w()
         })
@@ -932,6 +928,11 @@ export default {
             vo.loading = true
             vo.$emit('loading', true)
             vo.map = createMap(vo.$refs.panel, vo.opt)
+            //畫布解析度所依之 devicePixelRatio: map 每次 resize 皆以當下值重算畫布, 於 resize 事件記下(非響應式實例屬性), 供 onWindowResize 判斷 devicePixelRatio 是否已變(R16-6)
+            vo.dprApplied = window.devicePixelRatio
+            vo.map.on('resize', () => {
+                vo.dprApplied = window.devicePixelRatio
+            })
             //圖台移動狀態追蹤(根節點 state 屬性, R16): 須早於下方 load/projectiontransition 處理器註冊(追蹤器的 load 計時、投影遷移標記先於元件自身處理)
             vo.moveState = createMoveState(vo.map, (s) => {
                 vo.state = s
@@ -990,8 +991,22 @@ export default {
             })
         },
 
+        //公開方法: 手動重算地圖尺寸。容器尺寸改變之追蹤只由 maplibre 內建 trackResize(ResizeObserver)負責(單一來源, R16-6):
+        //元件不得另行偵測尺寸並呼叫 map.resize(), 否則同一次尺寸改變發兩組 movestart/resize/moveend, 第二組晚於繪製時 state 會中途 idle 再 moving
         resize() {
             if (this.map) this.map.resize()
+        },
+
+        //視窗 resize 事件(瀏覽器縮放、跨不同像素比之螢幕): devicePixelRatio 改變而容器 CSS 尺寸不變(固定像素容器)時, ResizeObserver 不觸發,
+        //maplibre 6.14.0 亦無 devicePixelRatio 監聽, 畫布解析度會停在舊值(畫面模糊); 此時補一次 map.resize()(以當下 devicePixelRatio 重算畫布)。
+        //容器尺寸亦改變者(百分比尺寸之容器)交 maplibre 內建 trackResize 處理(其 resize 同樣以當下 devicePixelRatio 重算), 此處不重複呼叫(R16-6)
+        onWindowResize() {
+            let vo = this
+            if (!vo.map || window.devicePixelRatio === vo.dprApplied) return
+            let cv = vo.map.getCanvas()
+            let ct = vo.map.getContainer()
+            if (cv.clientWidth !== ct.clientWidth || cv.clientHeight !== ct.clientHeight) return
+            vo.map.resize()
         },
 
         // 以地圖實際層級為準同步 currentZoom 與 opt.zoom(層級被不發 zoomend 之路徑改動時, 如切換投影、resize 後之世界高度適配; R12-6)
@@ -2118,7 +2133,7 @@ export default {
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Thu Nov 05 2026 16:05:32 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Thu Nov 05 2026 22:55:54 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

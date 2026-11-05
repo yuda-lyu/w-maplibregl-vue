@@ -53,6 +53,8 @@ let isIdle = wmaplibreglvue.$el.getAttribute('state') === 'idle'
 
 注意:`state` 只反映相機移動與投影切換,不反映資料圖層(點、線、面)的增刪改;載入階段另有 `loading` 屬性(載入中為 `true`,完成後移除)。
 
+容器尺寸改變(resize)由 maplibre 內建的尺寸追蹤(`trackResize`)單一來源處理,一次尺寸改變只發一組 `movestart`/`resize`/`moveend`(元件不另行偵測尺寸)。`state` 為 Vue 響應式屬性、於微任務更新:`moving` → `idle` 若於同一 JS 任務內完成(例如 resize 後同步重繪即達 `idle`),Vue 會合併更新,屬性不曾顯示 `moving`;此時地圖已靜止,維持 `idle` 即為真。使用端請等待 `idle`,不要等待 `moving` 出現。瀏覽器縮放等使 `devicePixelRatio` 改變、而容器 CSS 尺寸不變(固定像素容器)時,元件於視窗 `resize` 事件補一次 maplibre `resize()`,重算畫布解析度。另容器尺寸改變(例如父層改變元件之寬高)是由 `ResizeObserver` 於下一影格回呼才開始處理,改變容器之當下屬性仍為 `idle`;要等尺寸套用完成,請等畫布尺寸(`map.getCanvas().clientHeight` 等)或 maplibre 之 `resize` 事件,再等 `idle`。
+
 ## 連續調整疊加層透明度(`previewOverlayOpacity`)
 
 使用端自帶圖層列表與透明度滑桿時,拖曳滑桿期間要地圖即時跟著變,放開時才提交完整狀態。元件的 `setOverlayOpacity(idx, val)` 會回寫 `opt`、同步內部 `baseMaps` 並重繪面板,適合放開時提交,不適合逐幀呼叫(`opt` 愈大、圖層愈多,每次呼叫愈慢);拖曳中請改呼叫公開方法 `previewOverlayOpacity(name, val)`:只改地圖上該疊加層的繪製屬性,不回寫 `opt`、不改元件內部的 `baseMaps`、不重繪面板,可逐幀呼叫。

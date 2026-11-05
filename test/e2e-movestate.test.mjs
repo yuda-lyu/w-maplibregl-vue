@@ -9,6 +9,7 @@
 //   J-wheel 靜止時收到滾輪事件即轉 moving(搶在 movestart 之前); 滾輪未引起移動(層級已達上限)則短時間內落定 idle
 //   J-proj  投影切換(opt.projection 變更、自動投影於層級 8 切換)期間亦為 moving, 切換結束後才轉 idle
 //   J-back  逾時後備: 相機停止 3000ms 後仍未收到 idle 事件(圖磚逾時未載完、繪製被暫停等)亦落定為 idle; 高負載下亦須落定
+//   J-resize 一次容器尺寸改變只發一組 movestart/resize/moveend(尺寸追蹤單一來源: maplibre 內建 trackResize, 元件不另行偵測尺寸; R16-6), 故 state 恰一組 moving → idle
 //   J-keep  只新增屬性, 不改變既有行為(R16 以既有 e2e 全套不變為證, 不在本檔)
 //
 // 真實 user path(6 步):
@@ -21,7 +22,7 @@
 //
 // 按鈕全清單比對(範例頁): 子選單項、#btnPanTo(M2a)、#btnCenterTo(M2b)、#btnEaseTo(M2c)、#btnFlyTo(M2d)、#btnZoomTo(M2e)、#btnJumpTo(M2f)、
 //   #btnLongEase(M14)、#btnApiMercator(M13)、#btnOptCenter(M12a)、#btnZoom7(前置/M8)、#btnZoom22(M4 前置、M12b)、#btnMercator(M5)、#btnGlobe(M5)、
-//   #btnAuto(未獨立案例: 與 #btnMercator/#btnGlobe 同為 opt.projection 賦值, 路徑同 M5)、#btnTall(M6)、縮放 +/- 按鈕(M11)、滾輪(M3、M4)、拖曳(M10)。
+//   #btnAuto(未獨立案例: 與 #btnMercator/#btnGlobe 同為 opt.projection 賦值, 路徑同 M5)、#btnTall(M6、M6b、M6c)、縮放 +/- 按鈕(M11)、滾輪(M3、M4)、拖曳(M10)。
 //
 // 觀察量以事件同步, 不以固定等待判定: 等「state 變化記錄出現 moving 後再出現 idle」、等「idle 後累計 N 影格」;
 // 唯二用到時間量者: ①否定斷言「idle 事件被吞時, 逾時前不得落定」(M7, 以 moveend 起算之時間差, 下限為逾時常數本身), ②CPU 節流下仍落定(M8)之上限為防懸置。
@@ -319,13 +320,165 @@ describe('e2e-movestate', function() {
         assert.strictEqual(errs.length, 0, `不應有頁面錯誤: ${errs.join(' | ')}`)
     })
 
-    it('E2E-M6 J-move 容器尺寸改變(resize): moving → idle, idle 後位姿不再變動', async function() {
-        await gotoExample()
+    //M6/M6b/M6c 共用: 容器高 500 → 400(#btnTall), 斷言
+    //  J-resize: 一次容器尺寸改變只發一組 movestart/resize/moveend(尺寸追蹤單一來源: maplibre 內建 trackResize, 規則帳本 R16-6)
+    //    — 同一次尺寸改變若有第二個來源呼叫 map.resize(), 第二組晚於繪製時 idle 事件會夾在兩組之間, state 變成 moving → idle → moving → idle;
+    //    該序列的出現與否取決於兩個來源之相對時序(負載越高越常見), 故以事件組數(與時序無關)斷言單一來源
+    //  J-move: 依 maplibre 之 resize 為 ResizeObserver 回呼內「同步 resize() 加同步 redraw()」, idle 可能於同一 JS task 內即發出(redraw 內之 _render 末段),
+    //    此時 moving → idle 兩次寫入 data.state 皆在 Vue 非同步更新(微任務)之前, Vue 合併為不變, 根節點 state 屬性不曾顯示 moving(map 已靜止, 屬性維持 idle 即為真);
+    //    idle 於其後之影格才發出時, 屬性須顯示 moving 後轉 idle。兩種情形由「movestart 後是否已過微任務檢查點」判定, 各自之期望序列是確定的, 不接受其他序列:
+    //      已過檢查點 → 變化序列恰為 moving → idle(assertMoveSeq/assertIdleSettled, 與其他觸發同一組斷言), 且 idle 事件當下屬性已為 moving
+    //      未過檢查點 → 變化序列為空(屬性不曾改變), idle 事件當下 isMoving()=false、loaded()=true, 其後位姿與屬性不再變動
+    //  前提: 畫布確實隨之改變(預設:容器縮小, 畫布 CSS 高 500 → 400; opt.before/opt.after 可改), 否則「只發一組」可能只是因為根本沒有 resize
+    //  以事件同步: 等 moveend 之後之 idle 事件, 再累計 POSE_FRAMES 影格
+    //  opt.act: 觸發尺寸改變之動作(預設點 #btnTall); opt.before/opt.after: 動作前後畫布(canvas.width/height 為畫布像素, clientWidth/clientHeight 為 CSS 尺寸)應有之值
+    let runResizeCase = async (label, opt = {}) => {
+        let act = opt.act || (async () => await page.locator('#btnTall').click())
+        let before = opt.before || { ch: 500 }
+        let after = opt.after || { ch: 400 }
+        let readCanvas = async () => await page.evaluate(() => {
+            let c = window.__getMap().getCanvas()
+            return { w: c.width, h: c.height, cw: c.clientWidth, ch: c.clientHeight }
+        })
         await startTrace()
-        await page.locator('#btnTall').click()
-        let d = await settleTrace('resize')
-        assertMoveSeq(d, 'resize')
-        assertIdleSettled(d, 'resize')
+        let c0 = await readCanvas()
+        await page.evaluate(() => {
+            let m = window.__getMap()
+            let root = window.__getRoot()
+            window.__rs = []
+            window.__idleInfo = []
+            let mc = { ran: true } //movestart 之後是否已過微任務檢查點(Vue 之 nextTick 排在本微任務之前, 故 ran 為真時 Vue 已更新過 DOM)
+            //元件 data.state 於追蹤器回呼內同步寫入(早於 Vue 之 DOM 更新, 不受批次合併影響): 本鉤子註冊晚於追蹤器, 故各事件當下讀到的是該事件處理後之值
+            let vm = root.__vue__
+            window.__dataAt = []
+            let hRs = () => window.__rs.push(performance.now())
+            let hMs = () => {
+                mc.ran = false
+                queueMicrotask(() => {
+                    mc.ran = true
+                })
+                window.__dataAt.push({ type: 'movestart', data: vm.state })
+            }
+            let hMe = () => window.__dataAt.push({ type: 'moveend', data: vm.state })
+            let hIdle = () => {
+                window.__idleInfo.push({ t: performance.now(), ran: mc.ran, dom: root.getAttribute('state') })
+                window.__dataAt.push({ type: 'idle', data: vm.state })
+            }
+            m.on('resize', hRs); m.on('movestart', hMs); m.on('moveend', hMe); m.on('idle', hIdle)
+            window.__offs.push(() => {
+                m.off('resize', hRs)
+                m.off('movestart', hMs)
+                m.off('moveend', hMe)
+                m.off('idle', hIdle)
+            })
+        })
+        await act()
+        try {
+            await page.waitForFunction(() => {
+                let me = window.__ev.filter((e) => e.type === 'moveend')
+                return me.length >= 1 && window.__ev.some((e) => e.type === 'idle' && e.t >= me[me.length - 1].t)
+            }, null, { timeout: 20000 })
+        }
+        catch (err) {
+            throw new Error(`${label}: 20s 內未見 moveend 後之 idle 事件, 事件=${JSON.stringify(await page.evaluate(() => window.__ev.map((e) => e.type)))}, state 變化=${JSON.stringify((await stateSeq()).map((e) => e.state))}`)
+        }
+        let tIdle = await page.evaluate(() => {
+            let me = window.__ev.filter((e) => e.type === 'moveend')
+            return window.__ev.find((e) => e.type === 'idle' && e.t >= me[me.length - 1].t).t
+        })
+        await page.waitForFunction(({ t, n }) => window.__frames.filter((f) => f.t > t).length >= n, { t: tIdle, n: POSE_FRAMES }, { timeout: 15000 })
+        let d = await page.evaluate(() => {
+            window.__rafOn = false
+            return { seq: window.__stateLog.filter((e) => e.t >= window.__mark), ev: window.__ev, frames: window.__frames, rs: window.__rs, idleInfo: window.__idleInfo, dataAt: window.__dataAt }
+        })
+        let c1 = await readCanvas()
+        for (let k of Object.keys(before)) assert.strictEqual(c0[k], before[k], `${label}: 前提 — 動作前畫布 ${k} 應為 ${before[k]}, 實際 ${JSON.stringify(c0)}`)
+        for (let k of Object.keys(after)) assert.strictEqual(c1[k], after[k], `${label}: 前提 — 動作後畫布 ${k} 應為 ${after[k]}, 實際 ${JSON.stringify(c1)}`)
+        //J-resize
+        assert.strictEqual(d.rs.length, 1, `${label} J-resize: 一次尺寸改變應只發 1 次 resize 事件, 實際 ${d.rs.length}`)
+        assert.strictEqual(d.ev.filter((e) => e.type === 'movestart').length, 1, `${label} J-resize: 應只發 1 次 movestart`)
+        assert.strictEqual(d.ev.filter((e) => e.type === 'moveend').length, 1, `${label} J-resize: 應只發 1 次 moveend`)
+        //J-move(追蹤器逐事件, 與 DOM 之批次合併無關): movestart、moveend 處理後 data.state 皆為 moving, idle 處理後為 idle
+        //  — 同 task 時序下 DOM 屬性不可觀察, 此組斷言使追蹤器之錯誤(movestart 不轉 moving、moveend 即轉 idle)在兩種時序下皆被抓到
+        assert.deepStrictEqual(d.dataAt.map((x) => `${x.type}:${x.data}`).slice(0, 3), ['movestart:moving', 'moveend:moving', 'idle:idle'], `${label} J-move: 追蹤器於 movestart/moveend/idle 事件處理後之 data.state, 實際 ${JSON.stringify(d.dataAt)}`)
+        //J-move / J-idle
+        let tEnd = d.ev.find((e) => e.type === 'moveend').t
+        let ei = d.idleInfo.find((x) => x.t >= tEnd) //moveend 之後第一個 idle 事件
+        assert.ok(ei, `${label}: 前提 — moveend 之後有 idle 事件`)
+        console.log(`    [${label}] idle 時序: ${ei.ran ? '其後之 task(屬性經 moving → idle)' : '與 movestart 同一 task(屬性不變)'}`)
+        if (ei.ran) {
+            assert.strictEqual(ei.dom, 'moving', `${label} J-move: idle 於其後之 task 才發出, 事件當下根節點 state 屬性應已為 moving, 實際 ${ei.dom}`)
+            assertMoveSeq(d, label)
+            assertIdleSettled(d, label)
+        }
+        else {
+            assert.strictEqual(ei.dom, 'idle', `${label} J-move: movestart 與 idle 同一 task, 屬性不曾改變而維持 idle, 實際 ${ei.dom}`)
+            assert.deepStrictEqual(seqNames(d), [], `${label} J-move: movestart 與 idle 同一 task 時屬性不應有任何變化(不得出現 moving 殘留或中途 idle 閃爍), 實際 ${JSON.stringify(seqNames(d))}`)
+            let evIdle = d.ev.find((e) => e.type === 'idle' && e.t >= tEnd)
+            assert.strictEqual(evIdle.moving, false, `${label} J-idle: idle 當下 map.isMoving() 應為 false`)
+            assert.strictEqual(evIdle.loaded, true, `${label} J-idle: idle 當下 map.loaded() 應為 true`)
+            let after = d.frames.filter((f) => f.t > ei.t)
+            assert.ok(after.length >= POSE_FRAMES, `${label}: idle 後影格數 ${after.length}`)
+            let last = after[after.length - 1]
+            assert.strictEqual(after.filter((f) => !poseEq(f, last)).length, 0, `${label} J-idle: idle 後位姿不應再變動`)
+            assert.ok(after.every((f) => f.state === 'idle'), `${label} J-idle: idle 後 state 不應為 moving`)
+        }
+        assert.strictEqual(await getState(), 'idle', `${label}: 最終 state 應為 idle`)
+        assert.strictEqual(errs.length, 0, `不應有頁面錯誤: ${errs.join(' | ')}`)
+    }
+
+    it('E2E-M6 J-move/J-resize 容器尺寸改變(resize): moving → idle, idle 後位姿不再變動, 一次尺寸改變只發一組 movestart/resize/moveend', async function() {
+        await gotoExample()
+        await runResizeCase('resize')
+    })
+
+    it('E2E-M6c J-move/J-resize 容器尺寸改變(resize)於高負載(CPU 節流 6x): 無論 idle 與 movestart 是否同一 task, 序列皆符合期望且只發一組', async function() {
+        await gotoExample()
+        let cdp = await page.context().newCDPSession(page)
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 })
+        try {
+            await runResizeCase('resize(CPU 節流 6x)')
+        }
+        finally {
+            await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+        }
+    })
+
+    it('E2E-M6b J-move/J-resize 容器尺寸改變(resize)且短計時器(<=5ms)被延後 150ms(模擬高負載下計時器晚於繪製): 仍只發一組, 序列符合期望', async function() {
+        await gotoExample()
+        //時序注入(控制 resize 時序, 非真實負載): 其後建立之 <=5ms 計時器延後 150ms, 使任何「以計時器延後呼叫 map.resize()」之第二來源必晚於第一組繪製與 idle;
+        //  maplibre 內建 trackResize 為 ResizeObserver 回呼內即時呼叫(節流器之 50ms 計時器不受影響), 不經 <=5ms 計時器
+        await page.evaluate((ms) => {
+            let st = window.setTimeout
+            window.setTimeout = function(fn, d, ...a) {
+                return st.call(window, fn, (d || 0) <= 5 ? (d || 0) + ms : d, ...a)
+            }
+        }, 150)
+        await runResizeCase('resize(計時器延後)')
+    })
+
+    it('E2E-M6d J-resize 瀏覽器縮放(devicePixelRatio 1 → 1.25, 固定像素容器之 CSS 尺寸不變): 畫布解析度隨之重算, 只發一組 movestart/resize/moveend, 序列符合期望', async function() {
+        await gotoExample()
+        //CDP 模擬縮放 125%: 視窗 CSS 尺寸 1000x1100 → 800x880、devicePixelRatio 1 → 1.25; 容器為固定 800x500px, CSS 尺寸不變, ResizeObserver 不觸發,
+        //  maplibre 6.14.0 亦無 devicePixelRatio 監聽, 須由元件於視窗 resize 事件補一次 map.resize()(R16-6; 否則畫布停在 800x500 像素, 於 1.25 倍下被放大而模糊)
+        let cdp = await page.context().newCDPSession(page)
+        await runResizeCase('瀏覽器縮放(DPR 1 → 1.25)', {
+            act: async () => await cdp.send('Emulation.setDeviceMetricsOverride', { width: 800, height: 880, deviceScaleFactor: 1.25, mobile: false }),
+            before: { w: 800, h: 500, cw: 800, ch: 500 },
+            after: { w: 1000, h: 625, cw: 800, ch: 500 },
+        })
+        //devicePixelRatio 已無變化時視窗再 resize(1.25 不變、視窗寬 800 → 790): 不應再呼叫 map.resize()(以事件同步: 等視窗 resize 事件處理完, 元件之處理器先於本監聽器執行)
+        await page.evaluate(() => {
+            window.__nWin = 0
+            window.addEventListener('resize', () => {
+                window.__nWin++
+            })
+        })
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 790, height: 880, deviceScaleFactor: 1.25, mobile: false })
+        await page.waitForFunction(() => window.__nWin >= 1, null, { timeout: 10000 })
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)))
+        let nResize = await page.evaluate(() => window.__rs.length)
+        assert.strictEqual(nResize, 1, `devicePixelRatio 無變化之視窗 resize 不應再觸發 map.resize(), map resize 事件累計 ${nResize}`)
     })
 
     it('E2E-M7 J-back 逾時後備: idle 事件未觸發時, 相機停止 3000ms 後仍落定 idle(逾時前不得落定)', async function() {
