@@ -9,6 +9,13 @@
 - **執行**:`npm test`;單案 `npm test -- --reporter list --grep "<案名>"`.e2e 共用基準埠 8123(dev server;`e2e-fileprotocol` 例外,不起服務);**基準埠被占用時自動整組位移(8223、8323…),不沿用也不下殺占用者**(R19,2026-11-05 wm309);要沿用本機常駐之 dev server(變異檢驗等快速迴圈)須明確設 `E2E_PORT_OFFSET=0`,且該埠上的監聽者須確為本專案之 `vue-cli-service`,否則拒絕.
 - **站點補充(2026-11-05 wm309)**:`test/tools/e2ePorts.mjs`(基準埠單一定義與 `reserveE2ePorts`)、`test/tools/devServerIdentity.mjs`(埠上監聽者身分確認,無副作用)、`test/unit-e2ePortReserve.test.mjs`(PR-001～PR-013,15 案,R19).
 - **站點補充(2026-11-06 ma327)**:`test/unit-diffpath.test.mjs`(UD1–UD12,12 案;R8 修訂:僅 `name`、僅地形倍率之就地路徑)、`test/e2e-diffpath.test.mjs`(E2E-D1–D6,6 案;以第二個元件實例〔父層持有響應式 `opt`〕加 `page.route` 計數圖磚與 DEM 請求,不動範例頁;D6 例外取範例頁 `runtimeSync` 之 `#btnTerrainTune` 證明其觸發整組重套,保護 `e2e-runtime` E2E-012 之前提——E2E-012 之 hillshade 疊序於初始載入即成立,不論是否重套皆綠,單靠它驗不到重套).
+- **站點補充(2026-11-07 mv329b,排程第 329 項)**:`test/tools/e2eCdnLocal.mjs`(e2e 外部 script 本機副本:`CDN_LOCAL` 對照、`findExternalResources`/`findUnmapped`、`loadCdnLocal`、`routeCdnLocal(ctx)`)、`test/unit-e2eCdnLocal.test.mjs`(CL1–CL4,4 案)、`test/fixtures/cdn/w-demores-1.0.36/`(`dataRain.js` 85352 B、`dataRainClip.js` 5608 B);`e2e-movestate` 增 M8b、M8c、M8d(共 26 案).
+- **e2e 外部 script 本機副本(2026-11-07 mv329b,主控裁定)**:
+  - **要求**:e2e 進場不依賴外部 CDN.範例頁 `public/index.html` 之同步外部 script 一律於 e2e 之瀏覽器情境以 `ctx.route` 回應本機同版副本(`routeCdnLocal(ctx)`,於 `newContext` 後呼叫);副本優先取 `node_modules` 內對應套件之產物,無對應套件者放 `test/fixtures/cdn/<套件>-<版本>/`(不新增 ≥ 1MB 之檔);首頁有未列於 `CDN_LOCAL` 之外部 script/stylesheet、或副本檔不存在即拋錯(不靜默回退外網).範例頁對一般使用者之載入方式不變.
+  - **why**:2026-11-07 `yuda-lyu.github.io` 一度 60 秒未下載完,`page.goto(domcontentloaded)` 於進場 30 秒逾時,與被測功能無關.
+  - **對照(2026-11-07 以 sha256 比對,CDN 現行檔與副本逐位元組相同)**:jsdelivr `lodash/lodash.min.js` → `node_modules/lodash/lodash.min.js`(4.18.1,間接依賴);`yuda-lyu.github.io/wsemi/dist/wsemi.umd.js` → `node_modules/wsemi/dist/wsemi.umd.js`(1.9.51);`yuda-lyu.github.io/w-gis/dist/interp2.wk.umd.js` → `node_modules/w-gis/dist/interp2.wk.umd.js`(1.1.19);jsdelivr `w-demores/res/data/dataRain.js`、`dataRainClip.js` → `test/fixtures/cdn/w-demores-1.0.36/`(本套件未安裝 w-demores).CDN 網址未鎖版本而 `node_modules` 依 `package.json` 之範圍安裝,日後兩者可能不同;e2e 取已安裝版本(元件本身亦打包已安裝之 wsemi、w-gis).
+  - **站點全集**:經 dev server 首頁進場之 e2e 8 檔中 7 檔套用(`e2e-basemapzoom`、`e2e-displayorder`、`e2e-hover`、`e2e-movestate`、`e2e-opacity`、`e2e-runtime`、`e2e-zoomrange`;盤點 `grep -n "page.goto(baseUrl" test/e2e-*.test.mjs` 與 `grep -n routeCdnLocal test/e2e-*.test.mjs`);刻意不套:`e2e-diffpath`(其後另掛 `ctx.route('**/*')` 把非本機請求一律 `abort`,後註冊者優先,原本即不連外)、`e2e-fileprotocol`(自有測試頁 `test/fixtures/fileProtocol.html`,無外部 script).
+  - **測試**:`unit-e2eCdnLocal` CL1(實際首頁之外部資源皆有副本、對照表網址皆仍在首頁)、CL2(副本存在、fixtures < 1MB)、CL3(辨識 http/https/協定相對之 script 與 stylesheet)、CL4(未對應或副本不存在即拋錯).
 - **改動範圍 → 測試檔對照表(2026-11-06 建;改共用基礎〔`WMaplibreglVue.vue` 模板/樣式、範例頁 `App.vue` 選單、`test/tools/e2e-setup.mjs`〕即擴大為全套)**:
 
 | 改動範圍 | 必跑(非瀏覽器之 unit 全跑;e2e 只跑相關檔) |
@@ -19,6 +26,7 @@
 | 比例尺(`scaleBar.mjs`) | `unit-scaleBar`;`e2e-zoomrange`(Z16 系)、`e2e-runtime`(E2E-005) |
 | worker 載入(`mapCore.mjs`、`toolg/gDistRollupWorkerFuncs.mjs`、file://) | `unit-workerClassic`、`unit-workerBuild`;`e2e-fileprotocol` |
 | e2e 啟動輔助與埠(`test/tools/e2e-setup.mjs`、`e2ePorts.mjs`) | `unit-e2ePortReserve`;並任選一 e2e 檔實跑 |
+| e2e 外部 script 本機副本(`test/tools/e2eCdnLocal.mjs`、`test/fixtures/cdn/`、`public/index.html` 之外部 script) | `unit-e2eCdnLocal`;套用之 7 個 e2e 檔(見上〈e2e 外部 script 本機副本〉)或全套 |
 
 - **已修(2026-11-05 wm309,R19)**:`test/tools/e2e-setup.mjs` 之 `stopServer` 原以非同步 `spawn('taskkill')`,exit/SIGINT/SIGTERM 備援路徑實測無效(`process.exit`、SIGINT 後真實 `npx vue-cli-service` 殘留,2026-11-05 以 `tmp/wm309/exitpath.mjs` 重現),Ctrl+C 或 `mocha --exit` 後 dev server 會殘留;導入自動換埠後殘留者不再被「埠通即沿用」重用而每次多占一組埠,故改為同步 `spawnSync('taskkill …')`(只殺自己 spawn 的行程樹),`unit-e2ePortReserve` PR-013 守護(修前紅:shell 鏈替身於 `process.exit` 後殘留;修後綠).
 
@@ -46,6 +54,7 @@
 | runner | mocha `npm test`,逐檔同一程序 | — |
 | 服務 | `test/tools/e2e-setup.mjs`:`vue-cli-service serve --port <實際埠>`(基準埠 8123 空閒即 8123,指令列同導入前;被占用則整組位移,實際埠印入輸出 `[e2e-port]`);**埠上已有人監聽不沿用**:自動換埠下(保留後被占走)拋錯寫明占用者,手動鎖埠(`E2E_PORT_OFFSET` 已設)下須確認監聽者確為本專案之 `vue-cli-service` 才沿用(R19;導入前為「port 被佔則 reuse」,不問身分,會打到別人的服務) | 無共用埠位移以外之偏離;本套件只有前端 dev server 一個埠,無後端、redirect、CORS、種子之衍生埠 |
 | 啟動 | `w-package-tools-e2e/src/launchChromium.mjs`,每 `it()` 新瀏覽器 | — |
+| 外部 script | 範例頁首頁之同步外部 script 於 e2e 由 `routeCdnLocal(ctx)` 回應本機同版副本(R5〈e2e 外部 script 本機副本〉) | 2026-11-07 起;`e2e-diffpath` 以其 `**/*` 攔截 abort 外部請求、`e2e-fileprotocol` 無外部 script,皆不套用 |
 | 語系 | 無 i18n,單一變體 | — |
 | 標準圖 | **無跨 run 標準圖**;以當次 in-memory 區域取樣(前後比對或色彩比例)與 style 快照為斷言 | 本套件為元件庫、無操作手冊用圖;地圖畫面為 WebGL 畫布,圖磚以 data URI 或頁內自訂協定供應而離線決定性,語意(顏色出現/消失、請求計數)即可判定;既有三檔沿用此政策 |
 | 圖磚來源 | data URI(runtimeSync)或頁內 `maplibregl.addProtocol('e2ezlim', …)`(baseMap.maxzoom 頁),永不連外 | — |

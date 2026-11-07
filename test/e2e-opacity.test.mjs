@@ -31,6 +31,7 @@
 import assert from 'assert'
 import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 describe('e2e-opacity', function() {
     this.timeout(180000)
@@ -46,6 +47,7 @@ describe('e2e-opacity', function() {
     beforeEach(async function() {
         browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 1000 } })
+        await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()
         errs = []
         page.on('pageerror', (e) => errs.push(String(e.message)))

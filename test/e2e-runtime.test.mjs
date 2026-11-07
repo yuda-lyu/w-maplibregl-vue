@@ -55,6 +55,7 @@
 import assert from 'assert'
 import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 // 範例頁 AppBSCRuntimeSync 之固定地圖參數(與該頁 opt 一致)
 const MAP_CENTER = [0, 121.0] //[lat, lng]
@@ -92,6 +93,7 @@ describe('e2e-runtime', function() {
         //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
         browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
+        await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()
     })
     afterEach(async function() {

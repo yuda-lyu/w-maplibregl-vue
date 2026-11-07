@@ -14,6 +14,7 @@
 import assert from 'assert'
 import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 describe('e2e-displayorder', function() {
     this.timeout(180000)
@@ -29,6 +30,7 @@ describe('e2e-displayorder', function() {
         //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
         browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
+        await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()
     })
     afterEach(async function() {

@@ -10,41 +10,10 @@
 >
 > 本檔其餘各節(含〈測試與實測腳本〉內提及之〈圖台移動狀態〉等標題引用)請依標題至上列抽出檔查找;規則帳本同日已依類型拆檔,索引見 `sgud/rule/rulebook.md`(原引用之 R1 等節號照舊,依索引找分檔).
 
-## file:// 與不透明來源(sandbox iframe)之 worker(2026-11-02 mlfile,Gitea #46,規則帳本 R17)
-
-- **徵狀與一般 worker 載入失敗相同**(只見底圖、console 一行 `Worker failed to load`),但 http 正常:先看 `location.protocol` 是否 `file:`、是否在 sandbox iframe 內.使用端以 umd 產頁並雙擊開啟最常見;失敗無提示,面板(於首次 idle 後才渲染)與點位皆不出現,地圖不 idle.
-- **成因(Chromium 153 實測,`tmp/mlfile/probe-matrix.mjs` 之 4 建法 × file:///http/sandbox)**:module worker + Blob URL 於 file:// 與 sandbox iframe 皆於非同步 `error` 事件失敗(建構子不丟錯,故 maplibre `createWorker` 之 try/catch 不會退回 classic);classic + Blob、module + data:、classic + data: 皆可;http 四種皆可.maplibre 6.14.0 `workerFactory`:僅 URL 去掉 `?#` 後以 `.cjs` 結尾走 classic(此時跨來源會先 `fetch` 再建 classic Blob worker,同來源直接 `new Worker(url)`),其餘一律 module(跨來源時再包一層 `import "<url>"` 之 Blob).故以 data: URL 末尾加 `//.cjs` 註解即可選走 classic.
-- **`location.origin` 不是安全來源**:sandbox iframe 以 `src` 載入時 `location.origin` 仍為該 URL 之來源(實測 `http://127.0.0.1:8195`),只有 `window.origin` 與 Blob URL 之來源為 `'null'`;`srcdoc` 時 `location.origin` 才為 `'null'`.所以判斷 classic 不可用 `location.origin === 'null'`,也不可用 maplibre 之準則(Blob 來源與 `location.origin` 不同,`srcdoc` 兩者皆 `'null'` 而漏掉),本套件取「`protocol === 'file:'` 或 Blob URL 之來源為 `'null'`」(`mapCore.needClassicWorker`).Chromium 上 `file:` 條款與 Blob 來源條款重疊(file:// 之 Blob 來源亦為 `'null'`),保留 `file:` 為對 Firefox/Safari(未測)之保守條款,只有 unit U49 釘住.
-- **classic 轉換可行性**:內嵌 worker(ESM 自足單檔)唯一 export 為末尾 `export { X as default };`,無靜態 import、無 `import.meta`,2 處動態 `import()` classic 可用;去掉末尾 export 之前段以 `vm.Script` 可解析(含 `"use strict"` 前綴).acorn 掃頂層 `this`:6 處皆在 class `static{}` 區塊內(`this` 為該類別),無頂層 `this`/`arguments`,故 sloppy classic 與 strict module 無語意差,未加 `"use strict"` 前綴;日後 worker 出現頂層 `this` 須重新評估.
-- **data: URL 長度**:`encodeURIComponent` 後 733,682 字元(Chrome URL 上限 2 MiB = 2,097,152 之 35%);maplibre 升版使 worker 變大到約 2.8 倍時才逼近,U51 守門.
-- **CSP 實測(file://,Chromium 153,`tmp/mlfile/probe-csp.mjs`)**:`worker-src blob:` 可;`worker-src blob:; connect-src data:` 可;`connect-src 'self'`(不含 data:)→ maplibre `fetch(data:)` 被擋,點位與面板不顯示(症狀不同:console 為 CSP 違規訊息而非 `Worker failed to load`,地圖仍 idle);只放行 `worker-src data:`(不含 blob:)→ 建立 Blob worker 被擋,`Worker failed to load`;`script-src`/`default-src` 放行 `data: blob:` 且無 `worker-src` 可(回退).這些環境修前即失敗,非本修正引入.
-- **e2e 手法**:①`ctx.route('http://127.0.0.1:8195/**')` + `route.fulfill` 於瀏覽器內供應虛擬 http 來源(不開 port、不連外,仍為 `127.0.0.1` 可信來源),sandbox 外層頁(src 與 srcdoc 兩種)由 route 動態產生;②`ctx.addInitScript` 以 `Proxy` 包 `window.Worker` 記錄 `(url 開頭, type)`(只讀觀察,iframe 內亦生效),斷言 http 仍為 `module`+`blob:`、file:///sandbox 為 `classic`,證明走的是預期路徑而非碰巧通過;③點位以畫面像素取樣(`pngjs` 解螢幕截圖,三個點位中心 ±12px 內點位色 `#2196f3` 像素數,修後約 270、修前 0)佐證「使用者看得到」;④sandbox iframe 以 `locator('iframe').elementHandle().contentFrame()` 取 frame 後 `frame.waitForFunction/getByText`;⑤測當前 src:`before` 以 `w-package-tools/src/rollupFiles.mjs` 建置到 `test/_tmp/e2e-fileprotocol/dist`(約 25 秒,與發布同設定:umd、kebabCase、壓縮),`after` 刪除,不讀 `./dist`,故不會測到過期產物.(2026-11-02 依 dspec〈自有套件之發布與建置腳本〉撤,改回標準寫法:`before` 改為把 `src`、`toolg/gDistRollupComps.mjs`、`package.json` 複製到 `test/_tmp/e2e-fileprotocol/` 後以該夾為 cwd 執行 `node toolg/gDistRollupComps.mjs`,不在測試內另寫建置選項;「不讀 `./dist`、不測到過期產物」之目的不變)
-- **變異檢驗的設計**:對第三方內部判斷的「釘住」不能只靠 e2e——把 minified maplibre 原始碼檢查式(`checkMaplibreWorkerFactory`)另做成「單點改動須被偵測」的測試(U53),否則檢查式寫鬆而永遠通過.
-- **Bash 工具內路徑反斜線會被吃掉**:`decision-log.mjs C:\opensrcOper\...` 變成 `opensrcOperdnow...` 而失敗;任務資料夾一律用正斜線 `C:/opensrcOper/dnow/<id>`.
-
-## 比例尺色條與文字之實作與測試經驗(2026-11-04 wm71,Gitea #71,規則帳本 R15)
-
-- **提案(建議檔)查證屬實**:1.0.66 真實地圖以 `unproject` 量色條實寬兩點之 `distanceTo`,緯度 0 zoom 12 比值 1.278、緯度 24.7 zoom 12 為 0.703、緯度 0 zoom 10 為 0.958,色條實寬 82px(`width:80px` + 邊框 2px,`content-box`);與提案表格逐位相符(證據 `wm71-evidence/01`).`getRoundNum` 在 `maplibre-gl/src/ui/control/scale_control.ts:151`:取 `10^(整數位數-1)` 為底、首位 ≥5→5、≥3→3、≥2→2、≥1→1(< 1 時走 `getDecimalRoundNum` 取一位有效小數,非 1/2/3/5 表),與提案所述一致.
-- **量色條實寬須用 `:scope > div > div`**:`.clsScale` 內 `el.querySelector('div > div')` 會命中 flex 容器本身(選擇器對整份文件求值,`.clsScale` 為 div 即符合 `div > div`),量到 111.6px 而非 82px,探測時曾因此誤判;測試用 `.clsScale > div > div`.
-- **提案草案的 `border-box` + `height:3px` 會讓色條外高由 5px 變 3px**(原 `content-box` 之 3px + 上下邊框 2px = 5px):本次改 `height:5px`,並以 e2e 斷言外高 5px(變異 M7 驗證)+ 修前後量排版數字(面板高 19px、色條外高 5px、色條與文字間隙 4px、面板右下錨點皆同,`wm71-evidence/06`、`08`).
-- **草案以 `max / pow10(e)` 取首位有浮點邊界缺陷**:`3e-8 / 1e-8 = 2.9999999999999996` 使恰為 3 × 10^k 的上限少一級(V8 實測 `3e-4`、`3e-8`、`3e-13`、`3e-15`、`5e-17`… 等 15 個值偏小,`wm71-evidence/09`).改為與 `Number(n + 'e' + e)`(字串轉換得精確值)直接比較;U59 於實作初稿即抓到此問題(`wm71-evidence/07`).
-- **V8 的 `Math.log10` 於 1e-30~1e30 之 10 的次方皆精確**(實測):故「log10 偏小一位之比較修正」在本機走不到,變異「拿掉修正」先存活(U59 不鑑別);U61 暫代 `Math.log10 = (x) => Math.log(x) / Math.LN10`(`Math.log(1000) / Math.LN10 = 2.9999999999999996`)才使該分支被執行並殺死變異.遇到「防禦其他引擎」的分支,測試須能在本引擎製造該條件(暫代被依賴的內建函式,`finally` 還原),否則變異存活被誤判為冗餘.
-- **公式在 globe 低層級不準(R15 〈限制〉,未處理)**:預設投影低層級為 globe,墨卡托公式/`unproject` 實測 80px 距離:zoom 0 為 0.667、zoom 1 為 0.927~0.939、zoom 2 為 0.977~0.980、zoom 3 為 0.992~0.993、zoom ≥5 為 0.999~1.001(`wm71-evidence/02`);墨卡托投影全層級 1.001~1.010.提案草案的 E2E-Z16b 用預設投影 `jumpTo` 到 zoom 7,恰在誤差 < 0.1% 處,故不受影響;新增 e2e 若要測 zoom ≤ 2 須先決定是否改用 `unproject` 實測(需元件新增與地圖事件同步之狀態,待裁示).
-- **內建 `ScaleControl` 不改用之依據**(讀碼與讀 CSS,未實跑):`map.addControl` 掛入 maplibre 自己的四角容器,不經 `panelScale.position`/`getPanelOrder`;樣式 `maplibre-gl.css` 為白底 75%、`#333` 字與邊框,與深色玻璃面板不同;文字 ` `;`getRoundNum` 取整後色條寬可超過 `maxWidth`(`scale_control.ts:140-141` 之 `ratio` 可 > 1).優點是以 `unproject` 實測,globe 低層級較準.
-- **色條寬隨縮放變動 → 面板寬度變動**:右下角面板以右緣為錨,左緣隨之移動(實測緯度 0 zoom 10:修前面板寬 123.6px、修後 107.1px);高度不變.若使用端在意可另案固定面板最小寬(不屬 #71).
-- **e2e 比值斷言的容差**:`distanceTo` 取地球半徑 6371008.8 m,公式取赤道周長 40075016.686 m 換算(半徑 6378137 m),系統差 0.11%;Chrome 的 LayoutUnit 為 1/64px,`getBoundingClientRect().width` 量到 65.4062 而非 65.41;故比值取 2%、色條寬取 ±0.5px,外高 5px 與 `border-box` 另以精確斷言.
-- **變異檢驗作法(src 就地改、備份還原)**:修好後先 `cp` 備份 `scaleBar.mjs`、`WMaplibreglVue.vue` 到 `tmp/wm71/backup/`,每個變異就地以 Edit 改、跑對應測試、`cp` 備份還原,最後 `cmp` 回驗與備份位元組相同並 `git grep MUTANT` 無殘留;不使用 `git restore`/`stash`.元件層變異(拿掉 `border-box`、外高 3px)需跑 e2e(約 2 分鐘/次),純函式變異只跑 `unit-scaleBar`(2 秒).
-
-## 疊加層透明度預覽 `previewOverlayOpacity` 之實作與測試經驗(2026-11-04 wm76,Gitea #76,規則帳本 R18)
-
-- **提案數字不可照抄,量測要看情境**:提案引用「單層 `setPaintProperty` 0.4 ms、完整重套鏈 70 ms」是其應用情境.本套件範例頁(11 層)實測 `setOverlayOpacity` 含 Vue 沖刷 0.66~0.85 ms、原生 `setPaintProperty` 0.002 ms;加大情境(71 層 + `opt` 內 2 萬筆無關資料)為 36~38 ms.耗時幾乎全在 `syncBaseMapsToOpt` 寫 `opt` → deep watcher → `changeOpt` 全流程(每次呼叫 `changeOpt` 恰 1 次),與 `opt` 大小、圖層數成正比;`setOverlayOpacity` 同步段(`cloneDeep` + 寫入)僅 0.06~0.24 ms.
-- **`performance.now()` 在 headless Chromium 解析度僅 0.1 ms**:單次計時多得 0;須批次(連呼 100 次)總時間除以次數,且同步段與「含 `$nextTick` 沖刷」分開量,否則看不出 watcher 鏈的成本.
-- **提案草案(預覽時改內部 `baseMaps[i].opacity`)不採**(探測 `tmp/wm76b/probe-draft.mjs`:頁內以暫代模擬該語意,不改 src,非實跑草案碼):預覽期間內部值 0.3 ≠ `opt`,面板在下一次偶發重繪就顯示 `30%`(實測 A1);下一次無關 `opt` 變更使 `changeOpt` 以 opt 為準把內部值覆蓋回已提交值,面板回 `80%`,而 `baseMapsDataTemp` 未同步所以不重繪,地圖仍停在 0.3(A2,地圖與面板不一致).不改內部值時面板始終為 `80%`(B1、B2).不改內部值時,三條重套路徑(`updateBaseMapPaint`、`updateBaseMapsIncremental`、`applyBaseMaps`)都自 `getBaseMapOpacity(bm)` 設值,未提交的預覽自然回到已提交值,不需額外機制.注意:兩種設計在「無關 opt 變更後」地圖都停留預覽值(沒有重套就沒有回復),故預覽應以提交收尾——這是暫態語意的固有限制,README 已寫明.
-- **`style` 型別在假地圖上不建圖層、真地圖上圖層 id 帶序號尾碼**(`basemap-layer-<key>-<i>-<原id>`):`getLayer('basemap-layer-<key>')` 本就查不到,所以「`type:'style'` 回 false」與「圖層尚未加入回 false」難以區分;單元測試須用「`getLayer` 恆回真值」的假地圖才能鑑別 style/底圖判斷(第一版變異 M5b 因此存活,改用 `mapAny` 後被殺).防禦性守門(非陣列的 `baseMaps`)同理須構造「地圖對任何 id 都回有圖層」才有鑑別力.
-- **等價變異要列證據不硬殺**:M15(不略過非物件元素)存活——`null`/`undefined` 元素於 `baseMapKeys` 同樣丟錯而回 `false`,兩者輸出相同;保留守門為防禦性寫法,在帳本註明.
-- **元件層「地圖尚未載入」之測試法**:以 `wm.constructor`(元件建構子)於頁內 `new Ctor({ propsData: { opt } }).$mount(div)` 建第二個實例,`mounted` 同步建圖,緊接於掛載之後呼叫即在 `load` 之前(確定性,不靠時序);載入後同一實例再測底圖/同名/逐幀預覽,最後 `$destroy` 並移除容器.元件方法的 `!this.mapLoaded` 守門與 `getLayer`/`try-catch` 重疊(載入前 `getLayer` 查不到圖層即 `false`),故移除守門之變異為等價變異(V1),保留是為明示語意.
-- **e2e 在頁內執行含函式的斷言**:`evalWm(fn, arg)` 以 `(0, eval)('(' + fn.toString() + ')')(wm, arg)` 在頁面內執行(fn 不得引用外部變數);計數用的包裝(`syncBaseMapsToOpt`/`changeOpt`/`applyBaseMaps`/`map.setPaintProperty`)直接覆寫 vm 自有屬性與 map 實例屬性,結束後還原;`$forceUpdate` 為原型方法,覆寫為自有屬性後同樣有效.
-- **變異腳本需處理 CRLF**:本套件檔案為 CRLF,多行 `from`/`to` 須把 `\n` 轉 `\r\n`,否則「from 出現 0 次」被略過(第一次執行有 3 個變異因此未套用,改後補跑);備份在 `tmp/wm76b/orig/`、執行期間寫標記檔,被中斷時下次啟動先自備份還原.
+> **2026-11-07 抽出舊經驗**:下列 3 節(2026-11-02~11-04)已抽出至 `sgud/exp/experience_20261107.md`,節號與標題不變:
+> - file:// 與不透明來源(sandbox iframe)之 worker(2026-11-02 mlfile)
+> - 比例尺色條與文字之實作與測試經驗(2026-11-04 wm71)
+> - 疊加層透明度預覽 `previewOverlayOpacity` 之實作與測試經驗(2026-11-04 wm76)
 
 ## 建置流程(script.txt)
 
@@ -87,3 +56,14 @@
 - **禁用 `git stash`/`checkout` 時之「修前紅」**:手動還原修改取得修前等價狀態(把 `name` 自 `BASEMAP_PAINT_STATE` 移除、元件改 `false &&`)跑新 e2e,同時得修前紅與變異證據(D1、D3 紅,負向 D2、D4、D5 綠);另以兩個過寬變異(把 `maxzoom` 納入放行、忽略僅倍率旗標)驗負向案例(D2、D4、UD3 紅).單元測試因整檔新增而得真正之修前紅(原碼未改).
 - **README 契約句須逐句實測,且探測要控制變因**:「只改 `opt.center` 至高緯度則 `opt.zoom` 被改寫」僅地球投影成立,探測初版固定 `projection:'mercator'` 量到「不變」,補成未給/`'globe'`/`'mercator'` 三組才分清(未給與 `'globe'` 為 6→5.1249,`'mercator'` 不變);真滑鼠點擊面板勾選框須限定於本實例之面板(`#host .clsPanel input`),`.first()` 可能點到頁面上另一實例而得無效資料;凍結資料集物件本身時,面板顯隱勾選框狀態會變、圖層不隱藏、`opt` 無 `visible`,但頁面**無** `pageerror`——不能以「無錯誤」判定行為正常,須讀 `opt` 值與圖層 `visibility`.
 - **sgud 之 rulebook/experience 為 CRLF(state 為 LF)**:拆分腳本以 `\n` 切行會保留行尾 `\r`,新增之檔頭若為 LF 即混用,須統一為 CRLF;比對「原有行是否仍存在」時先去除 `\r`.Edit 工具編輯 CRLF 檔會保留 CRLF.拆分腳本寫在 `./tmp/`,輸出可導向暫存目錄先做純搬移驗證(遺失行 0)再改內容,以免「搬移」與「修改」混在一起無法區分.
+
+## 高負載下只出現一次之 e2e 紅之查證經驗(2026-11-07 mv329,`e2e-movestate` E2E-M8,規則帳本 R16)
+
+- **只有序列、沒有頁內紀錄的一次紅,先補觀察手段再重跑**:不改測試檔,以 mocha `--require` 掛鉤於 playwright 層包 `chromium.launch`——`newContext` 後 `addInitScript` 注入記錄器(全程記錄,不被測試之 `startTrace` 重設:wheel 事件、地圖事件、`data.state` 每次寫入〔`vm.$watch('state', …, { sync: true })` 即 `moveState` onChange 當下〕、逐影格位姿、long task),`browser.close` 前取回紀錄並截圖,root `afterEach` 寫入結果(通過者刪截圖).`--grep E2E-M8` 每次獨立 mocha 與 dev server,與 `npm test` 之路徑相同.
+- **堆疊判讀因受 V8 `Error.stackTraceLimit`(預設 10)所限**:Vue 之 watcher 框架吃掉多層,`toMoving` 之呼叫端(onWheel/onMoveStart/onProjection)被截掉;下次於記錄器先設 `Error.stackTraceLimit = 50`.本次改以時間判定:moving 寫入於第一個 wheel 後 0.8~12.3ms 且早於 movestart → 滾輪預標記.
+- **滾輪手勢之結束窗(maplibre 6.14.0 `scroll_zoom.ts`)**:wheel 型之 easing 以「距上一個 wheel 之時間 /200ms」推進,滿 1 後再設 200ms `_finishTimeout` 才發 `zoomend`/`moveend`;下一個 wheel 在此之前到達即續為同一手勢.實測 CPU 節流 6x:最後一次 wheel 後 436~736ms 發 `moveend`、584~1601ms 發 `idle`(自然 30 次,跨 8 級含投影切換與圖磚重載;停頓注入 3 次為 464~514ms、605~684ms);`moveend` 之後、`idle` 之前到達之 wheel 會開新手勢但 `state` 仍為 moving(不閃;讀碼推論:`onWheel` 於非 idle 時不動作、`onMoveStart` 重設計時,未實測),間隔須逾「wheel 至 `idle`」才閃.`waitForTimeout(60)` 之間隔在頁面端實為 116~361ms(節流 6x;一般條件與負載 ≤ 70% 相近;推測因 Playwright `mouse.wheel` 等瀏覽器處理完才返回,未以對照實驗驗證),故「14 次滾輪 = 一個手勢」只在本輪條件下成立,負載更高時是否逾此延遲為推測.
+- **同形狀可能是真停,不一定是缺陷**:`moving → idle → moving → idle` 先問中途 idle 是否為真——該 idle 前有無 `moveend` 與 `idle` 事件、當下 `isMoving()`/`loaded()`、idle 至下一個 moving 間位姿是否不變、下一個 moving 是否由晚於 idle 之輸入引起;全成立即狀態機正確,紅在測試前提.停頓注入要以事件同步(等 `state=idle` 再續滾),不用固定毫秒.
+- **負載產生器**:8 邏輯核、5 個低於標準優先權之忙迴圈子行程(佔空比由父行程依 `os.cpus()` 每秒調節,目標 62%、上限 70%)——佔空比 1 時整機約 50%,測試執行期間平均 56~62%、p95 70~82%(瀏覽器與 dev server 另占);quiet-run 之獨佔鎖需整機 ≤ 30% 才放行,他 agent 跑多開時排鎖約 15 分.
+- **外部 CDN 慢會使 `page.goto(domcontentloaded)` 逾時**:`public/index.html` 有 5 支同步外部 script(含 `yuda-lyu.github.io` 兩支 1.0~1.4MB);2026-11-07 github.io 一度 60 秒未下載完,e2e 於進場即逾時(與被測功能無關).量測時以 `ctx.route` 回應先前完整下載之同一檔案;2026-11-07 mv329b 起正式 e2e 以 `test/tools/e2eCdnLocal.mjs` 處理(R5).
+- **(mv329b)`ctx.route` 之先後**:Playwright 之路由後註冊者優先;某檔另掛 `**/*` 攔截且對外部請求 `abort`(`e2e-diffpath`)時,先註冊之本機副本路由不會被呼叫——該檔原本就不連外,不必套用.套用與否以「其後有無涵蓋外部網址之攔截」判,不以檔名判;是否真的接手以回應次數核對(探測:5 支各 1 次、長度與副本相同,進場 875ms).
+- **(mv329b)把「確定期望」寫成正負向一組**:新斷言 `assertWheelSeq` 依可觀察條件(手勢中地圖是否發過 `idle` 事件)分兩種期望;正向案(停頓注入 M8b)要另證「舊斷言下確定紅」,負向案(M8c 注入 `idle`、M8d 停頓中 `easeTo`)以 `assert.throws` 加訊息正則固定「被哪一條判紅」,並以暫改(M8c/M8d 直接呼叫、不包 `assert.throws`;M8b 換回舊斷言)實跑三案皆紅,還原後以 sha256 回驗.正向案不寫「恰 4 筆」:負載更高時其餘間隔亦可能逾窗而多停一次,恰 N 筆會把同一不穩定帶回來;以「注入點處有 idle 記錄」與逐段判定取代;負向案之前提亦以注入點(第幾個 wheel 之間)定位,不以序列索引.

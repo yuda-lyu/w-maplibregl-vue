@@ -53,6 +53,7 @@ import assert from 'assert'
 import { PNG } from 'pngjs'
 import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 const EPS = 1e-6
 const MIN_TOL = [-0.2, 0.3] //下限容差(相對 minZoom), 依據見檔頭
@@ -89,6 +90,7 @@ describe('e2e-zoomrange', function() {
     beforeEach(async function() {
         browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 1100 } })
+        await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()
         errs = []
         warns = []

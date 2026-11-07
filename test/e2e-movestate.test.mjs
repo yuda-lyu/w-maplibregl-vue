@@ -26,12 +26,15 @@
 //
 // 觀察量以事件同步, 不以固定等待判定: 等「state 變化記錄出現 moving 後再出現 idle」、等「idle 後累計 N 影格」;
 // 唯二用到時間量者: ①否定斷言「idle 事件被吞時, 逾時前不得落定」(M7, 以 moveend 起算之時間差, 下限為逾時常數本身), ②CPU 節流下仍落定(M8)之上限為防懸置。
+// 滾輪手勢(M8 滾輪段、M8b): 連續滾輪不保證為同一手勢(頁面端間隔受負載影響), 依「手勢中地圖是否發過 idle 事件」決定確定期望(assertWheelSeq; 排程第 329 項);
+//   M8b 以事件同步之停頓(等 state=idle)確定性重現中途真停, M8c(注入 idle 事件)、M8d(停頓中未經滾輪之 easeTo)證明該斷言對「中途錯誤 idle」「無輸入之 moving」判紅。
 //
 // 圖磚: 範例頁以 maplibregl.addProtocol('e2ems') 供應單色圖磚, 永不連外。
 // 標準圖政策: 依規則帳本〈e2e 映射〉無跨 run 標準圖(語意斷言)。無 i18n, 單一變體。每個 it() 各自 new browser。
 import assert from 'assert'
 import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 const EPS = 1e-9
 const IDLE_WAIT_MS = 3000 //= MOVE_IDLE_WAIT_MS(src/js/moveState.mjs); e2e 以頁面外觀察, 不 import src 以免與被測碼同源
@@ -51,6 +54,7 @@ describe('e2e-movestate', function() {
     beforeEach(async function() {
         browser = await launchChromium({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 1100 } })
+        await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()
         errs = []
         page.on('pageerror', (e) => errs.push(String(e.message)))
@@ -109,12 +113,16 @@ describe('e2e-movestate', function() {
     //state 於標記後之變化序列
     let stateSeq = async () => await page.evaluate(() => window.__stateLog.filter((e) => e.t >= window.__mark))
     //等「標記後 state 出現 moving, 之後為 idle」(事件同步; 從未出現 moving 即逾時失敗, 訊息帶變化序列), 再等 idle 後累計 POSE_FRAMES 影格
-    let settleTrace = async (label, timeout = 20000) => {
+    //opt.afterLastWheel: 最後一筆 idle 記錄須晚於最後一個 wheel 事件(滾輪手勢可能中途真停而先有中途 idle, 見 assertWheelSeq; 中途 idle 不是終點)
+    let settleTrace = async (label, timeout = 20000, opt = {}) => {
         try {
-            await page.waitForFunction(() => {
+            await page.waitForFunction((afterLastWheel) => {
                 let l = window.__stateLog.filter((e) => e.t >= window.__mark)
-                return l.length >= 2 && l[l.length - 1].state === 'idle'
-            }, null, { timeout })
+                if (!(l.length >= 2 && l[l.length - 1].state === 'idle')) return false
+                if (!afterLastWheel) return true
+                let wh = window.__ev.filter((e) => e.type === 'wheel')
+                return wh.length > 0 && l[l.length - 1].t > wh[wh.length - 1].t
+            }, !!opt.afterLastWheel, { timeout })
         }
         catch (err) {
             let seq = await stateSeq()
@@ -170,6 +178,81 @@ describe('e2e-movestate', function() {
         let movingFrames = d.frames.filter((f) => f.t >= tMoving && f.t < tIdle)
         assert.ok(movingFrames.every((f) => f.state === 'moving'), `${label}: moving 期間逐影格 state 應皆為 moving`)
         return { ms, me, idles }
+    }
+
+    //J-wheel/J-idle 滾輪手勢之確定期望(排程第 329 項, 2026-11-07 mv329b; 規則帳本 R16〈測試〉M8):
+    //  連續滾輪(每次後 waitForTimeout(60))不保證為同一手勢——頁面端實收間隔受負載影響(CPU 節流 6x 實測 116~361ms),
+    //  相鄰兩次滾輪之間隔超過「滾輪至 idle」(實測 584~1601ms)時地圖真的停下並發 idle, 依 J-idle 須為 idle, 下一次滾輪依 J-wheel 再轉 moving
+    //  (2026-11-02 全庫跟跑之 E2E-M8 紅即此形狀)。故依可觀察條件——手勢中(第一個與最後一個 wheel 事件之間)地圖是否發過 idle 事件——決定期望, 兩者皆確定:
+    //    未發過 → 恰 moving → idle(assertMoveSeq, 同前)
+    //    發過   → moving/idle 交替且以 idle 結束; 第一筆 moving 不早於第一個 wheel; 每段 moving 期間逐影格 state 皆 moving; 每筆 idle 記錄:
+    //             本段 moving 之後有 moveend 及其後之 idle 事件(相機已停、圖磚與繪製完成)且 idle 記錄緊隨該事件(<= 1000ms)、記錄當下 isMoving()=false、loaded()=true;
+    //             中途 idle 記錄至下一筆 moving 記錄之間: 須有晚於該 idle 之 wheel(J-wheel; 無輸入之 moving 不接受)、無 movestart、逐影格位姿不變且 state 皆 idle
+    //  中途錯誤 idle(地圖仍在移動)與無輸入之 moving 皆判紅(E2E-M8c、M8d 以注入證明); 最終落定與 idle 後位姿不變另由 assertIdleSettled 斷言
+    let assertWheelSeq = (d, label) => {
+        let wh = d.ev.filter((e) => e.type === 'wheel')
+        assert.ok(wh.length >= 1, `${label}: 前提 — 有 wheel 事件`)
+        let w0 = wh[0]
+        let wN = wh[wh.length - 1]
+        let midIdle = d.ev.filter((e) => e.type === 'idle' && e.t > w0.t && e.t < wN.t)
+        if (midIdle.length === 0) return { mid: 0, ...assertMoveSeq(d, label, { wheel: true }) }
+        let names = seqNames(d)
+        let alt = names.length >= 4 && names.length % 2 === 0 && names.every((s, i) => s === (i % 2 === 0 ? 'moving' : 'idle'))
+        assert.ok(alt, `${label} J-wheel/J-idle: 手勢中地圖發過 idle(${midIdle.length} 次), state 變化應為 moving/idle 交替並以 idle 結束, 實際 ${JSON.stringify(names)}`)
+        assert.ok(d.seq[0].t >= w0.t, `${label} J-wheel: 第一筆 moving 記錄不應早於第一個 wheel 事件`)
+        for (let i = 1; i < d.seq.length; i += 2) {
+            let rm0 = d.seq[i - 1] //本段 moving 記錄
+            let ri = d.seq[i] //本段 idle 記錄
+            let mf = d.frames.filter((f) => f.t >= rm0.t && f.t < ri.t)
+            assert.ok(mf.every((f) => f.state === 'moving'), `${label}: seq[${i - 1}] 至 seq[${i}] 之 moving 期間逐影格 state 應皆為 moving`)
+            let me = d.ev.filter((e) => e.type === 'moveend' && e.t > rm0.t && e.t <= ri.t)
+            assert.ok(me.length >= 1, `${label} J-idle: seq[${i}] 之 idle 記錄之前(本段 moving 之後)應有 moveend(相機已停), 實際無`)
+            let tMe = me[me.length - 1].t
+            let ei = d.ev.find((e) => e.type === 'idle' && e.t >= tMe && e.t <= ri.t)
+            assert.ok(ei, `${label} J-idle: seq[${i}] 之 idle 記錄須由 moveend 之後之 idle 事件導致(圖磚與繪製完成後才靜止)`)
+            assert.ok(ri.t - ei.t <= 1000, `${label} J-idle: seq[${i}] 之 idle 記錄應緊隨 idle 事件(實際相隔 ${Math.round(ri.t - ei.t)}ms)`)
+            assert.strictEqual(ri.moving, false, `${label} J-idle: seq[${i}] 轉 idle 當下 map.isMoving() 應為 false`)
+            assert.strictEqual(ri.loaded, true, `${label} J-idle: seq[${i}] 轉 idle 當下 map.loaded() 應為 true`)
+            if (i === d.seq.length - 1) break
+            let rm = d.seq[i + 1] //下一段 moving 記錄
+            let wTrig = wh.find((w) => w.t > ri.t && w.t <= rm.t)
+            assert.ok(wTrig, `${label} J-wheel: seq[${i + 1}] 之 moving 記錄應由晚於 seq[${i}] 之 idle 記錄之 wheel 引起(無輸入之 moving 不接受), idle 於 ${Math.round(ri.t)}ms、moving 於 ${Math.round(rm.t)}ms, 其間 wheel 0 個`)
+            let ms = d.ev.filter((e) => e.type === 'movestart' && e.t > ri.t && e.t < rm.t)
+            assert.strictEqual(ms.length, 0, `${label} J-idle: seq[${i}] 至 seq[${i + 1}] 之 idle 期間不應有 movestart(地圖於 state=idle 時開始移動), 實際 ${ms.length}`)
+            let fr = d.frames.filter((f) => f.t > ri.t && f.t < rm.t)
+            let drift = fr.filter((f) => !poseEq(f, fr[0]) || f.state !== 'idle')
+            assert.strictEqual(drift.length, 0, `${label} J-idle: seq[${i}] 至 seq[${i + 1}] 之 idle 期間位姿不應變動且 state 皆 idle, 不符影格 ${drift.length}/${fr.length}`)
+        }
+        return { mid: midIdle.length }
+    }
+
+    //滾輪手勢(E2E-M8b/M8c/M8d 共用; 前置由呼叫端完成: 7 級 globe 靜止): 畫布中心 deltaY -120 × 14, 每次後 waitForTimeout(60)(僅模擬連續滾動之間隔, 非同步手段)
+    //  opt.throttle: CDP CPU 節流倍率; opt.pauseAt: 第 n 次滾輪前以事件同步停頓——等根節點 state=idle(地圖已真停), 不以固定時間; opt.inPause: 停頓中執行(注入用);
+    //  opt.beforeWheel(i): 第 i 次滾輪前執行(注入用)。回傳 settleTrace 之結果(最後一筆 idle 晚於最後一個 wheel)
+    let runWheelGesture = async (label, opt = {}) => {
+        let cdp = null
+        if (opt.throttle) {
+            cdp = await page.context().newCDPSession(page)
+            await cdp.send('Emulation.setCPUThrottlingRate', { rate: opt.throttle })
+        }
+        try {
+            await startTrace()
+            let bb = await page.locator('.maplibregl-canvas').boundingBox()
+            await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2)
+            for (let i = 0; i < 14; i++) {
+                if (i === opt.pauseAt) {
+                    await waitUntilExist(page, `${label}: 中途 state=idle(地圖真停)`, () => window.__getRoot().getAttribute('state') === 'idle', { timeout: 60000 })
+                    if (opt.inPause) await opt.inPause()
+                }
+                if (opt.beforeWheel) await opt.beforeWheel(i)
+                await page.mouse.wheel(0, -120)
+                await page.waitForTimeout(60)
+            }
+            return await settleTrace(label, 60000, { afterLastWheel: true })
+        }
+        finally {
+            if (cdp) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+        }
     }
 
     it('E2E-M1 J-init 開啟頁面: state 自 moving 轉 idle(載入完成), 轉 idle 當下 loading 屬性已移除、map.loaded()=true', async function() {
@@ -534,14 +617,74 @@ describe('e2e-movestate', function() {
                 await page.mouse.wheel(0, -120)
                 await page.waitForTimeout(60)
             }
-            let d2 = await settleTrace('高負載 滾輪', 60000)
-            assertMoveSeq(d2, '高負載 滾輪', { wheel: true })
+            let d2 = await settleTrace('高負載 滾輪', 60000, { afterLastWheel: true })
+            //14 次滾輪是否為同一手勢由負載決定(頁面端間隔), 依手勢中地圖是否發過 idle 決定確定期望(assertWheelSeq; 2026-11-02 之紅即中途真停)
+            let rw = assertWheelSeq(d2, '高負載 滾輪')
+            console.log(`    [高負載 滾輪] 手勢中地圖發 idle ${rw.mid} 次(${rw.mid ? '中途真停, 逐段判定' : '同一手勢, 恰 moving → idle'}), 變化序列=${JSON.stringify(seqNames(d2))}`)
             let fin = assertIdleSettled(d2, '高負載 滾輪')
             assert.ok(fin.z > 7)
         }
         finally {
             await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
         }
+    })
+
+    it('E2E-M8b J-wheel/J-idle 滾輪手勢中途停頓至地圖真停(CPU 節流 6x, 第 7、8 次滾輪間等 state=idle): 停頓處確有 idle, 序列至少 moving → idle → moving → idle 且逐段為真, 其後 moving 由下一次滾輪引起', async function() {
+        await gotoExample()
+        assert.strictEqual(await getState(), 'idle', '前置: 載入完成後靜止')
+        //停頓注入(以事件同步, 不以固定時間): 重現 2026-11-02 E2E-M8 之形狀——頁面端相鄰滾輪間隔超過「滾輪至 idle」, 地圖真停
+        let d = await runWheelGesture('停頓注入', { throttle: 6, pauseAt: 7 })
+        let r = assertWheelSeq(d, '停頓注入')
+        assert.ok(r.mid >= 1, `前提: 手勢中地圖確發過 idle(走「發過」之期望), 實際 ${r.mid}`)
+        //停頓處(第 7、8 次滾輪之間)確有一筆 idle 記錄, 故序列至少兩段(只斷言恰 moving → idle 之舊斷言於此必紅);
+        //  不斷言恰 4 筆: 負載更高時其餘間隔亦可能逾「滾輪至 idle」而多停一次, 各段之真偽由 assertWheelSeq 逐段判定
+        let wh = d.ev.filter((e) => e.type === 'wheel')
+        assert.strictEqual(wh.length, 14, '前提: 頁面收到 14 個 wheel 事件')
+        assert.ok(d.seq.some((e) => e.state === 'idle' && e.t > wh[6].t && e.t < wh[7].t), `J-idle: 停頓處(第 7、8 次滾輪之間)應有 idle 記錄, 變化序列=${JSON.stringify(seqNames(d))}`)
+        assert.ok(seqNames(d).length >= 4, `停頓注入: state 變化應至少 moving → idle → moving → idle, 實際 ${JSON.stringify(seqNames(d))}`)
+        let fin = assertIdleSettled(d, '停頓注入')
+        assert.ok(fin.z > 7, `滾輪後層級應大於 7, 實際 ${fin.z}`)
+        assert.strictEqual(errs.length, 0, `不應有頁面錯誤: ${errs.join(' | ')}`)
+    })
+
+    it('E2E-M8c J-idle 斷言之鑑別力(負向): 滾輪手勢中注入 idle 事件(地圖仍在移動)使 state 中途轉 idle, assertWheelSeq 須判紅', async function() {
+        await gotoExample()
+        //注入: 第 5 次滾輪前(縮放動畫進行中)經公開 API 之 map 派發 idle 事件, 模擬「地圖仍在動卻落定 idle」之缺陷
+        let d = await runWheelGesture('注入 idle', {
+            beforeWheel: async (i) => {
+                if (i === 4) await page.evaluate(() => window.__getMap().fire('idle'))
+            },
+        })
+        //前提: 注入之 idle 於地圖移動中發出, 且使 state 中途轉 idle
+        let wh = d.ev.filter((e) => e.type === 'wheel')
+        assert.strictEqual(wh.length, 14, '前提: 頁面收到 14 個 wheel 事件')
+        assert.ok(d.ev.some((e) => e.type === 'idle' && e.moving === true && e.t > wh[3].t && e.t < wh[4].t), '前提: 第 4、5 次滾輪之間有於 map.isMoving()=true 時發出之 idle 事件(注入)')
+        assert.ok(d.seq.some((e) => e.state === 'idle' && e.t > wh[3].t && e.t < wh[4].t), `前提: 注入使 state 中途轉 idle, 變化序列=${JSON.stringify(seqNames(d))}`)
+        assert.throws(() => assertWheelSeq(d, '注入 idle'), /J-idle: seq\[\d+\] 之 idle 記錄之前\(本段 moving 之後\)應有 moveend/)
+    })
+
+    it('E2E-M8d J-wheel 斷言之鑑別力(負向): 中途真停後未經滾輪即移動(以 easeTo 模擬非使用者輸入之移動來源)使 state 再轉 moving, assertWheelSeq 須判紅', async function() {
+        await gotoExample()
+        let d = await runWheelGesture('無輸入之 moving', {
+            pauseAt: 7,
+            //停頓中(地圖已真停): 未經滾輪呼叫 easeTo, 等其 moving → idle 完成後才續滾
+            inPause: async () => {
+                let n0 = await page.evaluate(() => window.__stateLog.length)
+                await page.evaluate(() => {
+                    let m = window.__getMap()
+                    m.easeTo({ zoom: m.getZoom() + 0.1, duration: 300 })
+                })
+                await waitUntilExist(page, 'easeTo 之 moving → idle', (n) => {
+                    let l = window.__stateLog.slice(n)
+                    return l.length >= 2 && l[l.length - 1].state === 'idle'
+                }, { arg: n0, timeout: 30000 })
+            },
+        })
+        let wh = d.ev.filter((e) => e.type === 'wheel')
+        assert.strictEqual(wh.length, 14, '前提: 頁面收到 14 個 wheel 事件')
+        let inPause = d.seq.filter((e) => e.t > wh[6].t && e.t < wh[7].t).map((e) => e.state)
+        assert.deepStrictEqual(inPause, ['idle', 'moving', 'idle'], `前提: 停頓中先真停(idle), easeTo 再使 state 多一段 moving → idle, 實際停頓中之變化=${JSON.stringify(inPause)}`)
+        assert.throws(() => assertWheelSeq(d, '無輸入之 moving'), /J-wheel: seq\[\d+\] 之 moving 記錄應由晚於 seq\[\d+\] 之 idle 記錄之 wheel 引起/)
     })
 
     it('E2E-M9 J-move 移動中再觸發(panTo 後立即 flyTo): state 全程 moving 無 idle 閃爍, 終點 idle', async function() {
