@@ -18,23 +18,24 @@ import { needClassicWorker, buildClassicWorkerUrl } from '../src/js/mapCore.mjs'
 import { findClassicLength } from '../toolg/gDistRollupWorkerFuncs.mjs'
 
 //maplibre 判斷 classic 之規則(maplibre-gl 之 isClassicWorkerUrl 的複本, 由 U52 釘住其與 maplibre 同步)
-let isClassicWorkerUrl = (url) => url.split(/[?#]/)[0].endsWith('.cjs')
+//6.15.0 起(#8769)於「去掉 ?、# 後以 .cjs 結尾」之前加「整串 URL 以 .cjs 結尾」; 本套件之 data: URL 兩者皆成立(編碼後無 ? 與 #)
+let isClassicWorkerUrl = (url) => url.endsWith('.cjs') || url.split(/[?#]/)[0].endsWith('.cjs')
 
 let PREFIX = 'data:text/javascript;charset=utf-8,'
 let EXPORT_TAIL = /^\n*export\s*\{\s*[\w$]+\s+as\s+default\s*\};?\s*$/
 
-//檢查 maplibre-gl 主程式(production build, 識別字被壓縮故以 \w+ 代之)內 worker 建立之判斷是否仍如 mapCore.mjs 所依賴; 回傳未通過之檢查名稱
+//檢查 maplibre-gl 主程式(production build, 識別字被壓縮故以 [\w$]+ 代之: 6.16.0 起壓縮器產生含 $ 之識別字如 $c, 純 \w 比對不到)內 worker 建立之判斷是否仍如 mapCore.mjs 所依賴; 回傳未通過之檢查名稱
 function checkMaplibreWorkerFactory(s) {
     let failed = []
     let checks = [
-        // isClassicWorkerUrl: 去掉 ? 與 # 之後以 .cjs 結尾
-        ['isClassicWorkerUrl', /function \w+\((\w)\)\{return \1\.split\(\/\[\?#\]\/\)\[0\]\.endsWith\(`\.cjs`\)\}/],
+        // isClassicWorkerUrl(6.15.0 起): 整串 URL 以 .cjs 結尾, 或去掉 ? 與 # 之後以 .cjs 結尾
+        ['isClassicWorkerUrl', /function [\w$]+\(([\w$])\)\{return \1\.endsWith\(`\.cjs`\)\|\|\1\.split\(\/\[\?#\]\/\)\[0\]\.endsWith\(`\.cjs`\)\}/],
         // isCrossOrigin: new URL(url, location.href).origin !== location.origin
-        ['isCrossOrigin', /function \w+\((\w)\)\{if\(!\1\)return!1;let (\w)=globalThis\.location;if\(!\2\)return!1;try\{return new URL\(\1,\2\.href\)\.origin!==\2\.origin\}catch\{return!1\}\}/],
+        ['isCrossOrigin', /function [\w$]+\(([\w$])\)\{if\(!\1\)return!1;let ([\w$])=globalThis\.location;if\(!\2\)return!1;try\{return new URL\(\1,\2\.href\)\.origin!==\2\.origin\}catch\{return!1\}\}/],
         // workerFactory: asModule = !isClassic(url); 同來源直接 createWorker; 跨來源且 module 包 import Blob; 跨來源且 classic → fetch 後建 Blob 再 createWorker
-        ['workerFactory', /async function \w+\(\)\{let (\w)=[\w$.]+\.WORKER_URL\|\|\w+\(\),(\w)=!(\w+)\(\1\);if\(!(\w+)\(\1\)\)return (\w+)\(\1,\2\);if\(\2\)\{let (\w)=(\w+)\(\1\);try\{return \5\(\6,\2\)\}finally\{URL\.revokeObjectURL\(\6\)\}\}let (\w)=await (\w+)\(\1\);try\{return \5\(\8,\2\)\}finally\{URL\.revokeObjectURL\(\8\)\}\}/],
+        ['workerFactory', /async function [\w$]+\(\)\{let ([\w$])=[\w$.]+\.WORKER_URL\|\|[\w$]+\(\),([\w$])=!([\w$]+)\(\1\);if\(!([\w$]+)\(\1\)\)return ([\w$]+)\(\1,\2\);if\(\2\)\{let ([\w$])=([\w$]+)\(\1\);try\{return \5\(\6,\2\)\}finally\{URL\.revokeObjectURL\(\6\)\}\}let ([\w$])=await ([\w$]+)\(\1\);try\{return \5\(\8,\2\)\}finally\{URL\.revokeObjectURL\(\8\)\}\}/],
         // fetch 輔助: fetch 後須檢查 response.ok 再建 Blob
-        ['fetch 輔助', /async function \w+\((\w)\)\{let (\w)=await fetch\(\1\);if\(!\2\.ok\)throw Error\(`Failed to fetch worker script/],
+        ['fetch 輔助', /async function [\w$]+\(([\w$])\)\{let ([\w$])=await fetch\(\1\);if\(!\2\.ok\)throw Error\(`Failed to fetch worker script/],
     ]
     for (let [name, re] of checks) {
         if (!re.test(s)) failed.push(name)
@@ -158,13 +159,14 @@ describe('unit-workerClassic', function() {
         let s = fs.readFileSync(new URL('../node_modules/maplibre-gl/dist/maplibre-gl.mjs', import.meta.url), 'utf8')
         assert.deepStrictEqual(checkMaplibreWorkerFactory(s), [], '前提: 未改動者通過')
         let mutations = [
-            ['classic 之判斷由 .cjs 改為 .cjs2', (t) => t.replace('endsWith(`.cjs`)', 'endsWith(`.cjs2`)'), 'isClassicWorkerUrl'],
-            ['classic 之判斷不再去掉 ? 與 #', (t) => t.replace(/(function \w+\(\w\)\{return \w)\.split\(\/\[\?#\]\/\)\[0\](\.endsWith\(`\.cjs`\)\})/, '$1$2'), 'isClassicWorkerUrl'],
-            ['跨來源改為同來源才成立', (t) => t.replace(/(new URL\(\w,\w\.href\)\.origin)!==/, '$1==='), 'isCrossOrigin'],
-            ['跨來源不再比對 location.origin', (t) => t.replace(/(new URL\(\w,\w\.href\)\.origin!==)\w\.origin/, '$1""'), 'isCrossOrigin'],
-            ['跨來源且 classic 不再 fetch', (t) => t.replace(/let (\w)=await (\w+)\((\w)\);try\{return (\w+)\(\1,(\w)\)\}finally\{URL\.revokeObjectURL/, 'let $1=$3;try{return $4($1,$5)}finally{URL.revokeObjectURL'), 'workerFactory'],
-            ['同來源不再直接建 worker', (t) => t.replace(/(,\w=!\w+\(\w\);)if\(!(\w+)\((\w)\)\)return (\w+)\(\3,(\w)\);/, '$1'), 'workerFactory'],
-            ['fetch 輔助不再檢查 response.ok', (t) => t.replace(/if\(!(\w)\.ok\)throw Error\(`Failed to fetch worker script/, 'if(!1)throw Error(`Failed to fetch worker script'), 'fetch 輔助'],
+            ['classic 之判斷由 .cjs 改為 .cjs2', (t) => t.replaceAll('endsWith(`.cjs`)', 'endsWith(`.cjs2`)'), 'isClassicWorkerUrl'],
+            ['classic 之判斷不再整串比對結尾(6.15.0 前之舊式)', (t) => t.replace(/(function [\w$]+\([\w$]\)\{return )[\w$]\.endsWith\(`\.cjs`\)\|\|/, '$1'), 'isClassicWorkerUrl'],
+            ['classic 之判斷不再去掉 ? 與 #', (t) => t.replace(/(function [\w$]+\(([\w$])\)\{return \2\.endsWith\(`\.cjs`\))\|\|\2\.split\(\/\[\?#\]\/\)\[0\]\.endsWith\(`\.cjs`\)/, '$1'), 'isClassicWorkerUrl'],
+            ['跨來源改為同來源才成立', (t) => t.replace(/(new URL\([\w$],[\w$]\.href\)\.origin)!==/, '$1==='), 'isCrossOrigin'],
+            ['跨來源不再比對 location.origin', (t) => t.replace(/(new URL\([\w$],[\w$]\.href\)\.origin!==)[\w$]\.origin/, '$1""'), 'isCrossOrigin'],
+            ['跨來源且 classic 不再 fetch', (t) => t.replace(/let ([\w$])=await ([\w$]+)\(([\w$])\);try\{return ([\w$]+)\(\1,([\w$])\)\}finally\{URL\.revokeObjectURL/, 'let $1=$3;try{return $4($1,$5)}finally{URL.revokeObjectURL'), 'workerFactory'],
+            ['同來源不再直接建 worker', (t) => t.replace(/(,[\w$]=![\w$]+\([\w$]\);)if\(!([\w$]+)\(([\w$])\)\)return ([\w$]+)\(\3,([\w$])\);/, '$1'), 'workerFactory'],
+            ['fetch 輔助不再檢查 response.ok', (t) => t.replace(/if\(!([\w$])\.ok\)throw Error\(`Failed to fetch worker script/, 'if(!1)throw Error(`Failed to fetch worker script'), 'fetch 輔助'],
         ]
         for (let [name, mutate, expected] of mutations) {
             let t = mutate(s)

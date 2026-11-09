@@ -67,3 +67,7 @@
 - **外部 CDN 慢會使 `page.goto(domcontentloaded)` 逾時**:`public/index.html` 有 5 支同步外部 script(含 `yuda-lyu.github.io` 兩支 1.0~1.4MB);2026-11-07 github.io 一度 60 秒未下載完,e2e 於進場即逾時(與被測功能無關).量測時以 `ctx.route` 回應先前完整下載之同一檔案;2026-11-07 mv329b 起正式 e2e 以 `test/tools/e2eCdnLocal.mjs` 處理(R5).
 - **(mv329b)`ctx.route` 之先後**:Playwright 之路由後註冊者優先;某檔另掛 `**/*` 攔截且對外部請求 `abort`(`e2e-diffpath`)時,先註冊之本機副本路由不會被呼叫——該檔原本就不連外,不必套用.套用與否以「其後有無涵蓋外部網址之攔截」判,不以檔名判;是否真的接手以回應次數核對(探測:5 支各 1 次、長度與副本相同,進場 875ms).
 - **(mv329b)把「確定期望」寫成正負向一組**:新斷言 `assertWheelSeq` 依可觀察條件(手勢中地圖是否發過 `idle` 事件)分兩種期望;正向案(停頓注入 M8b)要另證「舊斷言下確定紅」,負向案(M8c 注入 `idle`、M8d 停頓中 `easeTo`)以 `assert.throws` 加訊息正則固定「被哪一條判紅」,並以暫改(M8c/M8d 直接呼叫、不包 `assert.throws`;M8b 換回舊斷言)實跑三案皆紅,還原後以 sha256 回驗.正向案不寫「恰 4 筆」:負載更高時其餘間隔亦可能逾窗而多停一次,恰 N 筆會把同一不穩定帶回來;以「注入點處有 idle 記錄」與逐段判定取代;負向案之前提亦以注入點(第幾個 wheel 之間)定位,不以序列索引.
+
+## 升 maplibre-gl 6.14.0 → 6.16.0 之經驗(2026-11-09 ml01,規則帳本 R1、R17)
+
+- **升版後第一個紅的是「以正則檢查壓縮檔內部判斷」之守門測試,不是功能**:`unit-workerClassic` U52/U53 以正則比對 `maplibre-gl.mjs`(production 壓縮檔)內 `isClassicWorkerUrl`/`isCrossOrigin`/`workerFactory` 之形狀,6.16.0 起壓縮器產生含 `$` 之識別字(如 `$c`)而 6.15.0(#8769)又讓 `isClassicWorkerUrl` 多一個整串 `endsWith('.cjs')` 條款,兩者各使檢查式失配;處置是識別字樣式 `\w` → `[\w$]`、檢查式改為新形狀並補一種單點改動(U53 共 8 種),**語意不變**(本套件 data: URL 無 `?#` 且以 `//.cjs` 結尾,新舊兩式皆判 classic).往後升版先看此二案:紅燈意味「第三方實作細節變了」,先讀兩版 `-dev.mjs` 同名函式再改檢查式,不要只放寬正則到不再鑑別.比對兩版行為時,`diff -u` 整份 `-dev.mjs` 因類別搬位達 7.8 千行雜訊,改以腳本「依方法名抽本體逐字比對」(60 餘個方法,多數逐字相同;差異僅 `Transform` 欄位收進 `_cameraState`、地形 DEM 載入中不覆寫相機高程、`TileManager` 之 `error` 僅非 tile 層才標記 source 已載入).
