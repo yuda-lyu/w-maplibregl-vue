@@ -1,10 +1,10 @@
 {
   "name": "w-maplibregl-vue",
-  "version": "1.0.81",
+  "version": "1.0.82",
   "main": "dist/w-maplibregl-vue.umd.js",
   "dependencies": {
     "maplibre-gl": "6.16.0",
-    "w-gis": "^1.1.26",
+    "w-gis": "^1.1.27",
     "wsemi": "^1.9.59"
   },
   "devDependencies": {
