@@ -38,7 +38,7 @@ To view some examples for more understanding, visit examples:
 | maplibre `idle` 事件 | → `idle`(滾輪已到而 `movestart` 未至時之 `idle` 不採計) |
 | 逾時後備 | 相機停止(`moveend`)3000ms 後仍未收到 `idle`(圖磚逾時未載完、繪製被暫停等)→ `idle`;靜止時滾輪事件後 600ms 內地圖未開始移動(如層級已達上下限)→ `idle`;逾時當下地圖仍在移動(長動畫、持續手勢)則續等 |
 
-e2e 偵測用法(Playwright;建議替元件根節點加上自己的 class 以限定範圍,避免與其他帶 `state` 屬性的元件混淆):
+e2e 偵測用法(Playwright;建議替元件根節點加上自己的 class 以限定範圍,避免與其他帶 `state` 屬性的元件混淆;以 Playwright 啟動 Chromium 系瀏覽器之建議作法見〈Testing〉):
 
 ```js
 // 操作後等圖台靜止再讀數值或截圖: 觸發操作(點擊、page.mouse.wheel、呼叫 panTo)當下,state 已轉為 moving,
@@ -149,3 +149,15 @@ umd 搭配本機檔案(vue 與 `w-maplibregl-vue.umd.js` 以相對路徑載入)�
 - 頁面若自帶 CSP(`Content-Security-Policy`):`file://` 須允許 `worker-src blob:`,且 `connect-src` 須允許 `data:`(或不設 `connect-src`)。Chromium 實測:只放行 `worker-src data:`、或 `connect-src 'self'` 而不含 `data:` 時,點位與面板不顯示,console 有 CSP 違規訊息;`script-src`/`default-src` 已放行 `data:`、`blob:` 者(無 `worker-src` 時回退)可用。sandbox iframe 搭配 CSP 者未測。一般離線 html 無 CSP;http(s) 頁面的 CSP 需求不變(`worker-src blob:`)。
 - 僅以 Chromium 實測;Firefox、Safari 在 `file://` 的行為未測。
 - 底圖、圖磚與地形等資源仍須由頁面能取得的來源供應(離線頁請用 data URI 或內嵌資料),本套件不改變其載入方式。
+
+## Testing
+
+`npm test` 含單元測試與 e2e 測試。e2e 以 Playwright 驅動 Chromium 系瀏覽器載入範例頁(vue-cli dev server),**一律經自有套件 w-playwright 啟動**:`test/tools/e2eLaunch.mjs` 為唯一啟動點(`wpw.launchChromium`);本套件不直接依賴 `playwright`／`playwright-core`,`devDependencies` 為 `w-playwright`。
+
+- **守門參數與原因**:Windows 上 Chromium 153 起,每啟動一個新的瀏覽器根行程,即以無效密碼替目前使用者呼叫一次 `LogonUser`(安全性紀錄 4625、錯誤密碼次數 +1;本機原則短時間內達門檻即鎖定帳號)。w-playwright 於每次啟動之命令列恰給一個 `--disable-features`(Playwright 預設清單＋`AutofillAiWalletPrivatePasses`＋呼叫端自給者),停用該功能即不再發生;不提供停用守門之選項。本套件 e2e 之啟動接線由 `unit-e2eLaunch`、`api-e2eLaunch` 驗證。
+- **安裝即帶入 playwright-core 1.64.1**(經 w-playwright 之精確版本依賴)。不需、也不要另裝 `playwright` 或 `playwright-core`。
+- **受管瀏覽器**:本套件 e2e 皆啟動無頭之 headless shell(不給 `channel`、`executablePath`;非真 Chrome／Edge／完整 Chromium)。首次啟動缺檔時由 w-playwright 自動安裝一次(`autoInstall: true`);要預先取得,在 Node 內執行 `import wpw from 'w-playwright'` 後 `await wpw.ensureChromium()`(完整 Chromium 為 `await wpw.ensureChromium({ kind: 'chromium' })`)。**不要用 `npx playwright install`**(依賴樹中他版被提升時,會下載到與 playwright-core 1.64.1 不同版本之瀏覽器)。
+- **離線**:於可連網之機器以同版 w-playwright 執行 `ensureChromium()`,把 Playwright 之瀏覽器資料夾(Windows 預設 `%LOCALAPPDATA%\ms-playwright`)複製至目標機,並在載入前以環境變數 `PLAYWRIGHT_BROWSERS_PATH` 指向該資料夾(Playwright 於模組載入時決定瀏覽器目錄,執行期改動不生效)。
+- **用真 Chrome(`channel: 'chrome'`)或 Edge(`channel: 'msedge'`)者**,須自行安裝 Google Chrome／Microsoft Edge(w-playwright 之 `findSystemChrome()` 只以檔案存在判定其位置,不啟動);本套件現有 e2e 不使用。
+- 不支援環境變數 `PWDEBUG`(inspector 模式值)與 `SELENIUM_REMOTE_URL`:會使守門失效,w-playwright 一律拒絕啟動。
+- 使用端以 Playwright 偵測本元件(見〈e2e 偵測用法〉)時,同樣建議經 w-playwright 啟動,以取得上述守門。

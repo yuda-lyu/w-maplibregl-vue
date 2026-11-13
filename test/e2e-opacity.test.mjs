@@ -29,7 +29,7 @@
 //   J-prev(src/components/WMaplibreglVue.vue previewOverlayOpacity 之 JSDoc): 「以名稱定位疊加層, 只改地圖上該圖層之繪製屬性, 不回寫opt、不重繪面板, 可逐幀呼叫; 拖曳結束時以setOverlayOpacity提交;
 //     val須為0~1之有效數字(數字或數字字串); 回傳true表已套用, 地圖未載入、查無名稱、名稱重複、底圖或style型別、圖層尚未加入、值無效或超出0~1時回傳false」
 import assert from 'assert'
-import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import launchE2eBrowser from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -45,7 +45,7 @@ describe('e2e-opacity', function() {
     let page = null
     let errs = null
     beforeEach(async function() {
-        browser = await launchChromium({ headless: true })
+        browser = await launchE2eBrowser({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 1000 } })
         await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()

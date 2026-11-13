@@ -51,7 +51,7 @@
 //   - E2E-Z18~Z21 開啟地形(離線平坦 DEM)之代表案例: 連按放大鈕不彈回、同 tick center+zoom、範圍拉入+center、平移動畫中改 zoom
 import assert from 'assert'
 import { PNG } from 'pngjs'
-import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import launchE2eBrowser from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -88,7 +88,7 @@ describe('e2e-zoomrange', function() {
     let errs = null //pageerror
     let warns = null //console.warn
     beforeEach(async function() {
-        browser = await launchChromium({ headless: true })
+        browser = await launchE2eBrowser({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 1100 } })
         await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()

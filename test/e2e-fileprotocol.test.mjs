@@ -28,7 +28,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { PNG } from 'pngjs'
-import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import launchE2eBrowser from './tools/e2eLaunch.mjs'
 import { copyToCopy, runNodeInCopy } from './tools/toolgCopy.mjs'
 
 //以模組位置定位(不依執行目錄)
@@ -141,7 +141,7 @@ describe('e2e-fileprotocol', function() {
     let page = null
     let errs = null
     beforeEach(async function() {
-        browser = await launchChromium({ headless: true })
+        browser = await launchE2eBrowser({ headless: true })
         ctx = await browser.newContext({ viewport: { width: 1000, height: 700 } })
         await ctx.addInitScript(recordWorkers)
         page = await ctx.newPage()

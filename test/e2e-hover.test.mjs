@@ -51,7 +51,7 @@
 //   - E2E-017 runtime 更換全域點擊函數: 點 #btnSwapClick 後點擊 circle 點 →
 //               新函數生效, #clickLog 顯示其寫入內容
 import assert from 'assert'
-import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import launchE2eBrowser from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -91,8 +91,8 @@ describe('e2e-hover', function() {
     let page = null
     let cbb = null //canvas boundingBox(viewport 座標)
     beforeEach(async function() {
-        //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
-        browser = await launchChromium({ headless: true })
+        //launchE2eBrowser 經 w-playwright 啟動(守門參數, 規則帳本 R20), 缺 Playwright 指定版本之瀏覽器時首次啟動自動下載(autoInstall, 與本機同版)
+        browser = await launchE2eBrowser({ headless: true })
         let ctx = await browser.newContext({ viewport: VIEWPORT })
         await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()

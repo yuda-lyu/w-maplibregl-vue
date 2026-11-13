@@ -12,7 +12,7 @@
 // act 全走 user-facing(滑鼠點擊選單/checkbox/canvas); assert 走 user-facing(popup 顯示文字)。
 // 無 i18n 文字差異(範例固定中英標籤), 故單一變體。每個 it() 各自 new browser。
 import assert from 'assert'
-import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import launchE2eBrowser from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -27,8 +27,8 @@ describe('e2e-displayorder', function() {
     let browser = null
     let page = null
     beforeEach(async function() {
-        //launchChromium, 缺Playwright指定版本之瀏覽器時首次啟動自動下載(與本機同版), 由w-package-tools-e2e提供
-        browser = await launchChromium({ headless: true })
+        //launchE2eBrowser 經 w-playwright 啟動(守門參數, 規則帳本 R20), 缺 Playwright 指定版本之瀏覽器時首次啟動自動下載(autoInstall, 與本機同版)
+        browser = await launchE2eBrowser({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
         await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()

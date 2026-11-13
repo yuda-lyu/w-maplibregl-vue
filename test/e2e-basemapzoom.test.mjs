@@ -29,7 +29,7 @@
 //               點 #btnSetMaxzoom → 取樣區轉為藍色, 其後 #overBlue 不再增加; source.maxzoom===18(補強)
 import assert from 'assert'
 import { PNG } from 'pngjs'
-import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import launchE2eBrowser from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -61,7 +61,7 @@ describe('e2e-basemapzoom', function() {
     let errs = null
     let clip = null
     beforeEach(async function() {
-        browser = await launchChromium({ headless: true })
+        browser = await launchE2eBrowser({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 760 } })
         await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)
         page = await ctx.newPage()

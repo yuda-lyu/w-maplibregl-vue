@@ -23,7 +23,7 @@
 import assert from 'assert'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import launchChromium from 'w-package-tools-e2e/src/launchChromium.mjs'
+import launchE2eBrowser from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==', 'base64')
@@ -43,7 +43,7 @@ describe('e2e-diffpath', function() {
     let errs = null
     let counts = null //page.route 計數: base=底圖圖磚請求(依 tile.local 下第一層路徑分組)、dem=DEM 請求
     beforeEach(async function() {
-        browser = await launchChromium({ headless: true })
+        browser = await launchE2eBrowser({ headless: true })
         let ctx = await browser.newContext({ viewport: { width: 1000, height: 700 } })
         counts = { base: {}, dem: 0 }
         await ctx.route('**/*', (route) => {
