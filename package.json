@@ -1,11 +1,11 @@
 {
   "name": "w-maplibregl-vue",
-  "version": "1.0.87",
+  "version": "1.0.88",
   "main": "dist/w-maplibregl-vue.umd.js",
   "dependencies": {
     "maplibre-gl": "6.16.0",
-    "w-gis": "^1.1.32",
-    "wsemi": "^1.9.64"
+    "w-gis": "^1.1.33",
+    "wsemi": "^1.9.65"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "^5.0.8",
@@ -22,7 +22,7 @@
     "vue": "^2.7.16",
     "w-jsonview-tree": "^1.0.44",
     "w-package-tools": "^1.1.28",
-    "w-package-tools-e2e": "^1.0.38",
+    "w-package-tools-e2e": "^1.0.39",
     "w-playwright": "^1.0.1"
   },
   "scripts": {
