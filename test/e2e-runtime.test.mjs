@@ -54,7 +54,7 @@
 //               coordinates 首角(左上)緯度須大於末角(左下)(補強)
 import assert from 'assert'
 import launchE2eBrowser from './tools/e2eLaunch.mjs'
-import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 // 範例頁 AppBSCRuntimeSync 之固定地圖參數(與該頁 opt 一致)
@@ -104,7 +104,7 @@ describe('e2e-runtime', function() {
     })
 
     let gotoExample = async () => {
-        await page.goto(baseUrl, { waitUntil: 'networkidle' })
+        await gotoApp(page)
         await page.locator('.clsSubMenu-basic', { hasText: 'runtimeSync' }).first().click()
         await waitUntilExist(page, 'map canvas', () => !!document.querySelector('.maplibregl-canvas'))
         await page.waitForTimeout(3000) //等圖層 render + idle 就位(data-URI 圖磚無網路等待)

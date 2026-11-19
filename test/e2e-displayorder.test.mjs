@@ -13,7 +13,7 @@
 // 無 i18n 文字差異(範例固定中英標籤), 故單一變體。每個 it() 各自 new browser。
 import assert from 'assert'
 import launchE2eBrowser from './tools/e2eLaunch.mjs'
-import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 describe('e2e-displayorder', function() {
@@ -40,7 +40,7 @@ describe('e2e-displayorder', function() {
     })
 
     let gotoExample = async () => {
-        await page.goto(baseUrl, { waitUntil: 'networkidle' })
+        await gotoApp(page)
         await page.locator('.clsSubMenu-basic', { hasText: 'displayOrderByType' }).first().click()
         await waitUntilExist(page, 'map canvas', () => !!document.querySelector('.maplibregl-canvas'))
         await page.waitForTimeout(2000) // 等點圖層(circle 同步加入)render + idle 型別重排就位

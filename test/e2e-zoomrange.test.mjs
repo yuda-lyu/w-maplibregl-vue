@@ -52,7 +52,7 @@
 import assert from 'assert'
 import { PNG } from 'pngjs'
 import launchE2eBrowser from './tools/e2eLaunch.mjs'
-import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 const EPS = 1e-6
@@ -138,7 +138,7 @@ describe('e2e-zoomrange', function() {
         }), q)
     }
     let gotoExample = async () => {
-        await page.goto(baseUrl, { waitUntil: 'networkidle' })
+        await gotoApp(page)
         await page.locator('.clsSubMenu-basic', { hasText: 'zoomRange' }).first().click()
         await waitUntilExist(page, 'map canvas', () => !!document.querySelector('.maplibregl-canvas'))
         await waitMapReady()
@@ -412,7 +412,7 @@ describe('e2e-zoomrange', function() {
     })
 
     it('E2E-Z10 baseMaps[i].maxzoom 與圖台上限分工: 自 18 級放大鈕續放大至 21, 仍以 18 級圖磚放大顯示且不請求 19 級以上', async function() {
-        await page.goto(baseUrl, { waitUntil: 'networkidle' })
+        await gotoApp(page)
         await page.locator('.clsMainMenu-basic', { hasText: 'panelBaseMaps' }).first().click()
         await page.locator('.clsSubMenu-basic', { hasText: 'baseMap.maxzoom' }).first().click()
         await waitUntilExist(page, '頁面計數 #overRed', () => !!document.querySelector('#overRed'))

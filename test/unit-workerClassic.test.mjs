@@ -8,7 +8,8 @@
 //            不以 location.origin 判斷(sandbox iframe 以 src 載入時 location.origin 仍為該 URL 之來源)
 //   J-url    buildClassicWorkerUrl: data: URL 解碼後 = classic 前段 + '\n//.cjs'; 去掉 ?、# 之後以 '.cjs' 結尾(maplibre 以此判為 classic); 編碼後無 ? 與 #(否則 '.cjs' 判斷被截斷);
 //            含非 ASCII 與 URL/模板特殊字元之原始碼可還原; 長度不超過 Chrome 之 URL 上限(2 MiB)
-//   J-maplibre  依賴之 maplibre 內部判斷(僅認 '.cjs' 結尾為 classic; 跨來源且 classic 時 fetch 後建 Blob; 以 URL 來源與 location.origin 比對判跨來源)未變;
+//   J-maplibre  依賴之 maplibre 內部判斷(僅認 '.cjs' 結尾為 classic; 跨來源且 classic 時 fetch 後建 Blob; 以 URL 來源與 location.origin 比對判跨來源;
+//            6.17.0 起(#8912)不透明來源之 module worker 改 fetch 後以 data: URL 建, 該分支只限 module——本套件之 classic data: URL 不經此分支)未變;
 //            此為第三方實作細節, maplibre-gl 升版若改了, 本案即紅, 須重新評估 mapCore.mjs 之 data: URL 作法並跑 e2e-fileprotocol
 import assert from 'assert'
 import fs from 'fs'
@@ -32,8 +33,12 @@ function checkMaplibreWorkerFactory(s) {
         ['isClassicWorkerUrl', /function [\w$]+\(([\w$])\)\{return \1\.endsWith\(`\.cjs`\)\|\|\1\.split\(\/\[\?#\]\/\)\[0\]\.endsWith\(`\.cjs`\)\}/],
         // isCrossOrigin: new URL(url, location.href).origin !== location.origin
         ['isCrossOrigin', /function [\w$]+\(([\w$])\)\{if\(!\1\)return!1;let ([\w$])=globalThis\.location;if\(!\2\)return!1;try\{return new URL\(\1,\2\.href\)\.origin!==\2\.origin\}catch\{return!1\}\}/],
-        // workerFactory: asModule = !isClassic(url); 同來源直接 createWorker; 跨來源且 module 包 import Blob; 跨來源且 classic → fetch 後建 Blob 再 createWorker
-        ['workerFactory', /async function [\w$]+\(\)\{let ([\w$])=[\w$.]+\.WORKER_URL\|\|[\w$]+\(\),([\w$])=!([\w$]+)\(\1\);if\(!([\w$]+)\(\1\)\)return ([\w$]+)\(\1,\2\);if\(\2\)\{let ([\w$])=([\w$]+)\(\1\);try\{return \5\(\6,\2\)\}finally\{URL\.revokeObjectURL\(\6\)\}\}let ([\w$])=await ([\w$]+)\(\1\);try\{return \5\(\8,\2\)\}finally\{URL\.revokeObjectURL\(\8\)\}\}/],
+        // workerFactory: asModule = !isClassic(url); 6.17.0 起(#8912)不透明來源(globalThis.origin === 'null')且為 module → fetch 後以 data: URL 建(classic 不經此分支, 本套件之 //.cjs data: URL 為 classic);
+        //   同來源直接 createWorker; 跨來源且 module 包 import Blob; 跨來源且 classic → fetch 後建 Blob 再 createWorker
+        ['workerFactory', /async function [\w$]+\(\)\{let ([\w$])=[\w$.]+\.WORKER_URL\|\|[\w$]+\(\),([\w$])=!([\w$]+)\(\1\);if\(\2&&([\w$]+)\(\)\)return ([\w$]+)\(await ([\w$]+)\(\1\),\2\);if\(!([\w$]+)\(\1\)\)return \5\(\1,\2\);if\(\2\)\{let ([\w$])=([\w$]+)\(\1\);try\{return \5\(\8,\2\)\}finally\{URL\.revokeObjectURL\(\8\)\}\}let ([\w$])=await ([\w$]+)\(\1\);try\{return \5\(\10,\2\)\}finally\{URL\.revokeObjectURL\(\10\)\}\}/],
+        // 不透明來源之判斷與 data: URL 輔助(#8912)
+        ['不透明來源判斷', /function [\w$]+\(\)\{return globalThis\.origin===`null`\}/],
+        ['module 於不透明來源之 data: URL 輔助', /async function [\w$]+\(([\w$])\)\{return`data:text\/javascript;charset=utf-8,\$\{encodeURIComponent\(await [\w$]+\(\1\)\)\}`\}/],
         // fetch 輔助: fetch 後須檢查 response.ok 再建 Blob
         ['fetch 輔助', /async function [\w$]+\(([\w$])\)\{let ([\w$])=await fetch\(\1\);if\(!\2\.ok\)throw Error\(`Failed to fetch worker script/],
     ]
@@ -148,7 +153,7 @@ describe('unit-workerClassic', function() {
     })
 
     // ---- J-maplibre ----
-    it('U52 maplibre 內部判斷未變: 僅認 .cjs 結尾為 classic、跨來源且 classic 時 fetch 後建 Blob、以 URL 來源與 location.origin 判跨來源', function() {
+    it('U52 maplibre 內部判斷未變: 僅認 .cjs 結尾為 classic、跨來源且 classic 時 fetch 後建 Blob、以 URL 來源與 location.origin 判跨來源、不透明來源之 data: URL 分支只限 module', function() {
         // J-maplibre: 讀實際被打包之 maplibre-gl 主程式(production build)
         let s = fs.readFileSync(new URL('../node_modules/maplibre-gl/dist/maplibre-gl.mjs', import.meta.url), 'utf8')
         assert.deepStrictEqual(checkMaplibreWorkerFactory(s), [], 'maplibre-gl 之 workerFactory 判斷已變, 須重新評估 src/js/mapCore.mjs 之 data: URL(//.cjs 結尾)作法, 並跑 test/e2e-fileprotocol.test.mjs')
@@ -165,7 +170,11 @@ describe('unit-workerClassic', function() {
             ['跨來源改為同來源才成立', (t) => t.replace(/(new URL\([\w$],[\w$]\.href\)\.origin)!==/, '$1==='), 'isCrossOrigin'],
             ['跨來源不再比對 location.origin', (t) => t.replace(/(new URL\([\w$],[\w$]\.href\)\.origin!==)[\w$]\.origin/, '$1""'), 'isCrossOrigin'],
             ['跨來源且 classic 不再 fetch', (t) => t.replace(/let ([\w$])=await ([\w$]+)\(([\w$])\);try\{return ([\w$]+)\(\1,([\w$])\)\}finally\{URL\.revokeObjectURL/, 'let $1=$3;try{return $4($1,$5)}finally{URL.revokeObjectURL'), 'workerFactory'],
-            ['同來源不再直接建 worker', (t) => t.replace(/(,[\w$]=![\w$]+\([\w$]\);)if\(!([\w$]+)\(([\w$])\)\)return ([\w$]+)\(\3,([\w$])\);/, '$1'), 'workerFactory'],
+            ['同來源不再直接建 worker', (t) => t.replace(/(return [\w$]+\(await [\w$]+\([\w$]\),[\w$]\);)if\(!([\w$]+)\(([\w$])\)\)return ([\w$]+)\(\3,([\w$])\);/, '$1'), 'workerFactory'],
+            ['不透明來源之 data: URL 分支不再限 module(classic 亦走該分支, 6.17.0 起新增之 #8912 分支)', (t) => t.replace(/(let [\w$]=[\w$.]+\.WORKER_URL\|\|[\w$]+\(\),[\w$]=![\w$]+\([\w$]\);if\()[\w$]+&&/, '$1'), 'workerFactory'],
+            ['不透明來源之 data: URL 分支被移除', (t) => t.replace(/if\([\w$]+&&[\w$]+\(\)\)return [\w$]+\(await [\w$]+\([\w$]\),[\w$]\);/, ''), 'workerFactory'],
+            ['不透明來源判斷由 globalThis.origin 改為其他', (t) => t.replace('return globalThis.origin===`null`', 'return globalThis.origin===`nul1`'), '不透明來源判斷'],
+            ['data: URL 輔助不再編碼', (t) => t.replace(/(return`data:text\/javascript;charset=utf-8,\$\{)encodeURIComponent\((await [\w$]+\([\w$]\))\)\}/, '$1$2}'), 'module 於不透明來源之 data: URL 輔助'],
             ['fetch 輔助不再檢查 response.ok', (t) => t.replace(/if\(!([\w$])\.ok\)throw Error\(`Failed to fetch worker script/, 'if(!1)throw Error(`Failed to fetch worker script'), 'fetch 輔助'],
         ]
         for (let [name, mutate, expected] of mutations) {

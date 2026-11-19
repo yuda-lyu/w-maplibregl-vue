@@ -30,7 +30,7 @@
 import assert from 'assert'
 import { PNG } from 'pngjs'
 import launchE2eBrowser from './tools/e2eLaunch.mjs'
-import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 const RED = [220, 40, 40]
@@ -79,7 +79,7 @@ describe('e2e-basemapzoom', function() {
     })
 
     let gotoExample = async () => {
-        await page.goto(baseUrl, { waitUntil: 'networkidle' })
+        await gotoApp(page)
         await page.locator('.clsMainMenu-basic', { hasText: 'panelBaseMaps' }).first().click()
         await page.locator('.clsSubMenu-basic', { hasText: 'baseMap.maxzoom' }).first().click()
         await waitUntilExist(page, 'map canvas', () => !!document.querySelector('.maplibregl-canvas'))

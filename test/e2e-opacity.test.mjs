@@ -30,7 +30,7 @@
 //     val須為0~1之有效數字(數字或數字字串); 回傳true表已套用, 地圖未載入、查無名稱、名稱重複、底圖或style型別、圖層尚未加入、值無效或超出0~1時回傳false」
 import assert from 'assert'
 import launchE2eBrowser from './tools/e2eLaunch.mjs'
-import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
+import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 describe('e2e-opacity', function() {
@@ -59,7 +59,7 @@ describe('e2e-opacity', function() {
     })
 
     let gotoExample = async () => {
-        await page.goto(baseUrl, { waitUntil: 'networkidle' })
+        await gotoApp(page)
         await page.locator('.clsMainMenu-basic', { hasText: 'panelBaseMaps' }).first().click()
         await page.locator('.clsSubMenu-basic', { hasText: 'baseMap.opacity' }).first().click()
         await waitUntilExist(page, 'map canvas', () => !!document.querySelector('.maplibregl-canvas') && !!window.__getMapStyle)

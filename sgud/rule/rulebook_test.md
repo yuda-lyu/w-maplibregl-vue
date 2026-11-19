@@ -1,6 +1,6 @@
 # 規則帳本(測試配置與 e2e)
 
-本檔為 `sgud/rule/rulebook.md` 之分檔(2026-11-06 依全域設定 sgud 過長整理):測試目錄與命名配置、e2e 埠、e2e 映射(本套件之落地與偏離).節號與標題與拆分前一致,內容以搬移為主(同日另有修訂,標註 2026-11-06);索引與盤點指令說明見 `rulebook.md`.
+本檔為 `sgud/rule/rulebook.md` 之分檔(2026-11-06 依全域設定 sgud 過長整理):測試目錄與命名配置、e2e 映射(本套件之落地與偏離).節號與標題與拆分前一致,內容以搬移為主(同日另有修訂,標註 2026-11-06);索引與盤點指令說明見 `rulebook.md`.R19(e2e 埠)、R20(e2e 啟動瀏覽器)已於 2026-11-19 搬至 `rulebook_e2e.md`.
 
 ## R5 測試配置
 
@@ -10,13 +10,19 @@
 - **站點補充(2026-11-05 wm309)**:`test/tools/e2ePorts.mjs`(基準埠單一定義與 `reserveE2ePorts`)、`test/tools/devServerIdentity.mjs`(埠上監聽者身分確認,無副作用)、`test/unit-e2ePortReserve.test.mjs`(PR-001～PR-013,15 案,R19).
 - **站點補充(2026-11-06 ma327)**:`test/unit-diffpath.test.mjs`(UD1–UD12,12 案;R8 修訂:僅 `name`、僅地形倍率之就地路徑)、`test/e2e-diffpath.test.mjs`(E2E-D1–D6,6 案;以第二個元件實例〔父層持有響應式 `opt`〕加 `page.route` 計數圖磚與 DEM 請求,不動範例頁;D6 例外取範例頁 `runtimeSync` 之 `#btnTerrainTune` 證明其觸發整組重套,保護 `e2e-runtime` E2E-012 之前提——E2E-012 之 hillshade 疊序於初始載入即成立,不論是否重套皆綠,單靠它驗不到重套).
 - **站點補充(2026-11-07 mv329b,排程第 329 項)**:`test/tools/e2eCdnLocal.mjs`(e2e 外部 script 本機副本:`CDN_LOCAL` 對照、`findExternalResources`/`findUnmapped`、`loadCdnLocal`、`routeCdnLocal(ctx)`)、`test/unit-e2eCdnLocal.test.mjs`(CL1–CL4,4 案)、`test/fixtures/cdn/w-demores-1.0.36/`(`dataRain.js` 85352 B、`dataRainClip.js` 5608 B);`e2e-movestate` 增 M8b、M8c、M8d(共 26 案).
+- **站點補充(2026-11-19 wml550b)**:`test/unit-e2eGoto.test.mjs`(G1–G3,3 案,規則盤點;見下〈e2e 進場載入條件〉)、`test/tools/e2e-setup.mjs` 新增匯出 `gotoApp(page)`.
 - **站點補充(2026-11-13 pm-mlv,排程第 442 項)**:`test/tools/e2eLaunch.mjs`(e2e 唯一啟動點,經 w-playwright)、`test/tools/e2eLaunchChild.mjs`(接線測試之子行程配套)、`test/unit-e2eLaunch.test.mjs`(EL-01～EL-04,16 案)、`test/api-e2eLaunch.test.mjs`(EL-05,1 案;啟動 headless shell 一次);R20.
 - **e2e 外部 script 本機副本(2026-11-07 mv329b,主控裁定)**:
   - **要求**:e2e 進場不依賴外部 CDN.範例頁 `public/index.html` 之同步外部 script 一律於 e2e 之瀏覽器情境以 `ctx.route` 回應本機同版副本(`routeCdnLocal(ctx)`,於 `newContext` 後呼叫);副本優先取 `node_modules` 內對應套件之產物,無對應套件者放 `test/fixtures/cdn/<套件>-<版本>/`(不新增 ≥ 1MB 之檔);首頁有未列於 `CDN_LOCAL` 之外部 script/stylesheet、或副本檔不存在即拋錯(不靜默回退外網).範例頁對一般使用者之載入方式不變.
   - **why**:2026-11-07 `yuda-lyu.github.io` 一度 60 秒未下載完,`page.goto(domcontentloaded)` 於進場 30 秒逾時,與被測功能無關.
   - **對照(2026-11-07 以 sha256 比對,CDN 現行檔與副本逐位元組相同)**:jsdelivr `lodash/lodash.min.js` → `node_modules/lodash/lodash.min.js`(4.18.1,間接依賴);`yuda-lyu.github.io/wsemi/dist/wsemi.umd.js` → `node_modules/wsemi/dist/wsemi.umd.js`(1.9.51);`yuda-lyu.github.io/w-gis/dist/interp2.wk.umd.js` → `node_modules/w-gis/dist/interp2.wk.umd.js`(1.1.19);jsdelivr `w-demores/res/data/dataRain.js`、`dataRainClip.js` → `test/fixtures/cdn/w-demores-1.0.36/`(本套件未安裝 w-demores).CDN 網址未鎖版本而 `node_modules` 依 `package.json` 之範圍安裝,日後兩者可能不同;e2e 取已安裝版本(元件本身亦打包已安裝之 wsemi、w-gis).
-  - **站點全集**:經 dev server 首頁進場之 e2e 8 檔中 7 檔套用(`e2e-basemapzoom`、`e2e-displayorder`、`e2e-hover`、`e2e-movestate`、`e2e-opacity`、`e2e-runtime`、`e2e-zoomrange`;盤點 `grep -n "page.goto(baseUrl" test/e2e-*.test.mjs` 與 `grep -n routeCdnLocal test/e2e-*.test.mjs`);刻意不套:`e2e-diffpath`(其後另掛 `ctx.route('**/*')` 把非本機請求一律 `abort`,後註冊者優先,原本即不連外)、`e2e-fileprotocol`(自有測試頁 `test/fixtures/fileProtocol.html`,無外部 script).
+  - **站點全集**:經 dev server 首頁進場之 e2e 8 檔中 7 檔套用(`e2e-basemapzoom`、`e2e-displayorder`、`e2e-hover`、`e2e-movestate`、`e2e-opacity`、`e2e-runtime`、`e2e-zoomrange`;盤點 `grep -n "gotoApp(page)\|page.goto(baseUrl" test/e2e-*.test.mjs`〔2026-11-19 起 6 檔改走共用 `gotoApp`,見下〈e2e 進場載入條件〉〕與 `grep -n routeCdnLocal test/e2e-*.test.mjs`);刻意不套:`e2e-diffpath`(其後另掛 `ctx.route('**/*')` 把非本機請求一律 `abort`,後註冊者優先,原本即不連外)、`e2e-fileprotocol`(自有測試頁 `test/fixtures/fileProtocol.html`,無外部 script).
   - **測試**:`unit-e2eCdnLocal` CL1(實際首頁之外部資源皆有副本、對照表網址皆仍在首頁)、CL2(副本存在、fixtures < 1MB)、CL3(辨識 http/https/協定相對之 script 與 stylesheet)、CL4(未對應或副本不存在即拋錯).
+- **e2e 進場載入條件(2026-11-19 wml550b,主控裁定)**:
+  - **要求**:經 dev server 首頁進場之 e2e 以共用 `gotoApp(page)`(`test/tools/e2e-setup.mjs`)進場——`page.goto(baseUrl, { waitUntil: 'domcontentloaded' })` 後以 `waitUntilExist` 等 App 選單(`.clsMainMenu-basic`、`.clsSubMenu-basic`)已渲染;**不以 `networkidle` 為載入條件**,各檔不另寫一份;其後之點選單、等地圖與元件就緒仍由各檔依其既有之可觀察條件接續,就緒不得以固定延時代替.
+  - **why**:首頁預設範例(size)載入遠端底圖,`networkidle` 取決於外網,外網慢時 30 秒逾時(與被測功能無關;2026-11 批 6 跟跑之 `e2e-zoomrange` E2E-Z16、wml550 全套之 `e2e-displayorder` E2E-001、`e2e-zoomrange` E2E-Z12b 各現一次,皆時敗時過,重跑皆綠).
+  - **站點全集(2026-11-19)**:改呼叫 `gotoApp` 者 6 檔 7 處——`e2e-basemapzoom`(1)、`e2e-displayorder`(1)、`e2e-hover`(1)、`e2e-opacity`(1)、`e2e-runtime`(1)、`e2e-zoomrange`(2:`gotoExample` 與 E2E-Z10);刻意維持行內寫法:`e2e-movestate`(2 處)、`e2e-diffpath`(2 處),二者本即 `domcontentloaded`(`e2e-diffpath` 因其後另掛 `**/*` 攔截,見上),`e2e-fileprotocol` 用自有測試頁(`load`,不連外).盤點指令:`git grep -n "networkidle" -- test`(程式碼命中須為 0;命中之說明文字限 `e2e-movestate`、`e2eCdnLocal`、`e2e-setup` 之註解)、`git grep -n "page.goto(baseUrl" -- test`(載入條件皆須為 `domcontentloaded`).
+  - **測試**:`unit-e2eGoto` G1(`test/` 下全部 `.mjs` 程式碼無 `networkidle`)、G2(6 檔以 `gotoApp(page)` 進場且不另寫 `page.goto(baseUrl`、次數與站點全集相符;全部 e2e 之 `page.goto(baseUrl` 載入條件只可為 `domcontentloaded`)、G3(`gotoApp` 為 `domcontentloaded` 後接 `waitUntilExist`、就緒條件為主選單與子選單項已渲染、無固定延時、無 `networkidle`);行為面證據為 6 檔 e2e 實跑與變異(`sgud/exp/experience.md`〈e2e 進場載入條件改 domcontentloaded 之經驗〉).
 - **改動範圍 → 測試檔對照表(2026-11-06 建;改共用基礎〔`WMaplibreglVue.vue` 模板/樣式、範例頁 `App.vue` 選單、`test/tools/e2e-setup.mjs`〕即擴大為全套)**:
 
 | 改動範圍 | 必跑(非瀏覽器之 unit 全跑;e2e 只跑相關檔) |
@@ -26,43 +32,14 @@
 | 移動狀態(`moveState.mjs`、根節點 `state`) | `unit-moveState`;`e2e-movestate` |
 | 比例尺(`scaleBar.mjs`) | `unit-scaleBar`;`e2e-zoomrange`(Z16 系)、`e2e-runtime`(E2E-005) |
 | worker 載入(`mapCore.mjs`、`toolg/gDistRollupWorkerFuncs.mjs`、file://) | `unit-workerClassic`、`unit-workerBuild`;`e2e-fileprotocol` |
-| e2e 啟動輔助與埠(`test/tools/e2e-setup.mjs`、`e2ePorts.mjs`) | `unit-e2ePortReserve`;並任選一 e2e 檔實跑 |
+| e2e 啟動輔助與埠(`test/tools/e2e-setup.mjs`、`e2ePorts.mjs`;R19 見 `rulebook_e2e.md`) | `unit-e2ePortReserve`、`unit-e2eGoto`;並任選一 e2e 檔實跑 |
+| e2e 進場(`e2e-setup.mjs` 之 `gotoApp`、首頁載入條件) | `unit-e2eGoto`;經 `gotoApp` 進場之 6 檔(`e2e-basemapzoom`、`e2e-displayorder`、`e2e-hover`、`e2e-opacity`、`e2e-runtime`、`e2e-zoomrange`) |
 | e2e 外部 script 本機副本(`test/tools/e2eCdnLocal.mjs`、`test/fixtures/cdn/`、`public/index.html` 之外部 script) | `unit-e2eCdnLocal`;套用之 7 個 e2e 檔(見上〈e2e 外部 script 本機副本〉)或全套 |
 | e2e 啟動點(`test/tools/e2eLaunch.mjs`、`e2eLaunchChild.mjs`)、`package.json` 之 `w-playwright` 版本、`w-playwright` 升版 | `unit-e2eLaunch`、`api-e2eLaunch`(R20);並任選一 e2e 檔實跑(改共用基礎即全套) |
 
 - **已修(2026-11-05 wm309,R19)**:`test/tools/e2e-setup.mjs` 之 `stopServer` 原以非同步 `spawn('taskkill')`,exit/SIGINT/SIGTERM 備援路徑實測無效(`process.exit`、SIGINT 後真實 `npx vue-cli-service` 殘留,2026-11-05 以 `tmp/wm309/exitpath.mjs` 重現),Ctrl+C 或 `mocha --exit` 後 dev server 會殘留;導入自動換埠後殘留者不再被「埠通即沿用」重用而每次多占一組埠,故改為同步 `spawnSync('taskkill …')`(只殺自己 spawn 的行程樹),`unit-e2ePortReserve` PR-013 守護(修前紅:shell 鏈替身於 `process.exit` 後殘留;修後綠).
 
-## R19 e2e 埠:基準埠單一定義、被占用時整組位移、不沿用也不下殺非本實例(排程第 309 項,2026-11-05 wm309;規格 `C:/opensrcOper/dspec/e2e埠與多套件同跑.md` E1～E8)
-
-- **要求**:
-  1. **基準埠只在 `test/tools/e2ePorts.mjs` 定義**(`FRONTEND_PORT = 8123`),該模組載入時呼叫一次 `reserveE2ePorts([FRONTEND_PORT], { avoid: OTHER_TEST_PORTS })`;其餘處一律經 `resolveE2ePort(FRONTEND_PORT)`(`e2e-setup.mjs` 之 `PORT`、`baseUrl`)取實際埠,基準埠字面只可出現在 `e2ePorts.mjs`.沒有占用時即 8123、`E2E_PORT_OFFSET` 維持未設、指令列 `vue-cli-service serve --port 8123` 與導入前相同.
-  2. **`OTHER_TEST_PORTS` 列本套件其他測試寫死之埠**(現為 `[8195]`:`e2e-fileprotocol` 之虛擬 http 來源,`context.route` 供應、不開 port、不連外;`unit-workerClassic` 之 8080、8195 只是純函式輸入字串,不連線).新增寫死埠忘了列即紅(PR-010).本套件無 api-／unit- 測試開真實監聽埠(PR-010 掃描 `.listen(<字面埠>`),故無規格 E8 之撞埠待處理.
-  3. **`startServer` 不沿用占用者**:以 TCP 連線檢查(不送 HTTP 請求)偵測埠上是否有人監聽;有人監聽時,自動換埠(`reservation.source === 'auto'`)下必為保留後被他人占走(E5),拋錯寫明占用者(PID 與命令列)、不沿用、不下殺;手動鎖埠(`E2E_PORT_OFFSET` 已設,含 0＝沿用本機常駐 dev server 之逃生口)下,須 `judgeOwnDevServer` 確認監聽者**全部**為本專案之 `vue-cli-service`(命令列同時含「專案根絕對路徑＋分隔字元」與 `vue-cli-service`)才沿用,其餘一律拒絕.查不到監聽表或命令列、無人監聽皆視為不是(預設拒絕;查詢失敗與無人要分開).導入前為「埠通即沿用,不問身分」,被占用時會打到別人的服務.
-  4. **spawn 後確認埠上的監聽者確為本專案之 `vue-cli-service`**(`vue-cli-service` 之 portfinder 在埠被占走時會靜默改用別的埠,而測試連的仍是原埠);不是則拋錯並收掉自己 spawn 的行程(`stopServer`),`started` 維持 false.就緒後 `reservation.noteOwn(serverProc)` 記下本實例之服務行程,供下次開跑依身分清除殘留(`taskkill /F` 後殘留之 dev server)。
-  5. **下殺只動自己 spawn 的行程**:`test/` 內下殺站點全集固定為三處(`e2e-setup.mjs` `stopServer` 之同步 `taskkill /F /T /PID <serverProc.pid>` 與 POSIX `process.kill(-pid, 'SIGKILL')`、`toolgCopy.mjs` 之 `p.kill()`),無依埠、依名稱、依命令列下殺(PR-009;新增下殺站點即紅).`stopServer` 見自建行程已結束(`exitCode`／`signalCode` 非 null)即不下殺(其 PID 可能已被作業系統回收給無關行程;PR-012c);下殺為同步(exit／SIGINT／SIGTERM 備援路徑內之非同步 spawn 不會被等待;PR-013).身分確認(`devServerIdentity.mjs`)只用於「是否沿用」,不用於下殺.套件 `reserveE2ePorts` 另有「殘留預約回收」:持有者已死且專案根相同時,只依預約檔記錄之身分(PID＋起始時間＋映像)與行程鏈下殺本專案之殘留 dev server(`noteOwn` 登錄者),未登錄者不殺.
-  6. **畫面含埠之流程**:本套件無(無跨 run 標準圖;e2e 無 `location`／`href`／`origin` 斷言,截圖只作色彩比例取樣),規格 E7 不適用.日後新增含埠之流程依套件 README §2.12:`runBaselineCase` 之 `compareBuf` 以 `overlayRegions` 覆蓋,或 `reserveE2ePorts(..., { baseOnly: true })`.
-  7. **範例頁 `src/AppBSCRuntimeSync.vue:54`、`src/AppPBMOpacity.vue:28` 之 `http://127.0.0.1:8123/nope/{z}/{x}/{y}.pbf`** 是 TileJSON 內的圖磚網址字串,`bounds` 指向視野外極小區域,視圖內零圖磚請求,實際不會連線(2026-11-05 以真實占用者占 8123、dev server 位移至 8223 跑 `e2e-opacity`／`e2e-runtime`,占用者被打到 0 次);屬套件範例頁(產品側),本輪不改.
-- **why**:多套件同機同跑時基準埠可能被別的套件占用;原寫法「埠通即沿用」使本套件 e2e 打到別人的服務(修前實測:占用 8123 跑 `e2e-displayorder` 0 passing／2 failing,占用者被打到 3 次),且全綠無法證明沒打到別人.
-- **盤點指令**:`git grep -nE --untracked "killPortListeners|taskkill|Stop-Process|process\.kill|\.kill\(|wmic|netstat" -- test`(下殺站點全集);`git grep -nE --untracked "localhost:|127\.0\.0\.1:" -- test`(寫死網址與埠;`unit-*` 為字串資料);`git grep -nE --untracked "\b8123\b" -- test src`(基準埠字面:`test/` 只在 `e2ePorts.mjs`;`src/` 為上條 7 之兩處).
-- **測試**:`test/unit-e2ePortReserve.test.mjs` PR-001～PR-013(15 案;真實子行程、真實監聽、真實命令列;期望由當下環境動態算出,不用 `skip`):PR-001～003 自動換埠(沒有占用／占用／兩行程不同組)、PR-004 保留後被搶走(E5)、PR-005 手動鎖埠遇非本專案占用者拒絕、PR-006 手動鎖埠遇本專案 `vue-cli-service` 沿用、PR-007／008 身分確認(真實命令列含非 ASCII 路徑往返、注入各形狀)、PR-009 下殺站點全集、PR-010 寫死網址與埠及 `OTHER_TEST_PORTS` 一致(含 `src/` 內基準埠字面只可為已審查之兩處)、PR-011 接線、PR-012a／b／c spawn 後身分確認、`noteOwn`、已結束之自建行程不下殺(以置於 PATH 最前之假 `taskkill` 記錄呼叫,含對照組)、PR-013 `process.exit` 路徑同步收掉自己 spawn 之行程樹.注入縫:`startServer(opts)` 之 `spawnFn`／`verifyMs`(僅單元測試用).PR-001 的「沒有占用即 8123、環境變數未設」只在 8123 當下空閒時被驗到(單檔跑);全套同一 mocha 行程內 e2e 之 dev server 占著 8123 時只驗到「位移」.
-- **變異證明(2026-11-05,`tmp/wm309/mutate.mjs`,逐一破壞後跑 `unit-e2ePortReserve`,結束必還原並以雜湊回驗)**:M1 不呼叫 `reserveE2ePorts`、M2 埠通即沿用(導入前行為)、M3 手動鎖埠不驗身分、M4 自動換埠下不拋 E5 錯、M5 spawn 後不驗身分、M6 身分判準不看專案根、M7 不看 vue-cli-service、M8 根路徑不接分隔字元、M9 查不到視為本實例、M10 無人監聽視為本實例、M11 `OTHER_TEST_PORTS` 漏列、M12 `avoid` 未交給 reserve、M13 `PORT` 寫死基準埠、M14 不 `noteOwn`、M15 存在性探測改送 HTTP、M16 新增依埠下殺站點、M17 失敗時不收自己 spawn 之行程、M18 `--port` 寫死 8123、M19 已結束之自建行程仍下殺、M20 vue-cli-service 比對放寬為任一處出現、M21 基準埠字面被改 → 皆被偵測(逐項紅燈案例見證據 `wm309-evidence/mutation-result*.json`);M22 同步下殺改回非同步另見證據.
-- **跑法**:`node C:/opensrcOper/tools/quiet-run.mjs --name e2ePortReserve --lock -- npx mocha test/unit-e2ePortReserve.test.mjs --timeout 180000`.
-- **已知限制**:①身分確認以 PowerShell(`Get-CimInstance Win32_Process`)取命令列(Windows;POSIX 走 `ps`,未實測);機器負載高時 `listenerPids`／PowerShell 偶逾時回 `null`,`describeListeners` 重試 3 次,仍失敗則預設拒絕(重跑即可).②exit／SIGINT／SIGTERM 備援已改為同步下殺(PR-013),但 `taskkill /F` 硬殺 mocha 本身時備援不執行(由下次開跑之「殘留預約回收」依 `noteOwn` 登錄之身分處理).③同機另有未導入、於保留後才綁定同埠者,由 `startServer` 大聲報錯,不自動處理(套件 README §2.12〈限制〉).
-
-## R20 e2e 啟動瀏覽器一律經 w-playwright(排程第 442 項,2026-11-13 pm-mlv;w-playwright 帳本 R-PW-ONLY、R-PW-WIRING)
-
-- **要求**:
-  1. **不直接依賴 Playwright**:`src`、`test`、`toolg` 與根目錄設定檔不得匯入 `playwright`／`playwright-core`(靜態、動態、`require`);`package.json` 不宣告之.`w-playwright` 為 `devDependencies`(`^1.0.1`;只供 e2e 測試、不入 dist,故 `toolg/gDistRollupComps.mjs` 之 `external`／`globals` 不列).安裝即帶入 `playwright-core` 精確 1.64.1(經 w-playwright;`node_modules/w-playwright` 須為 1.0.1 以上).
-  2. **e2e 啟動點只有一處**:`test/tools/e2eLaunch.mjs` 之 `launchE2eBrowser(opt)` = `wpw.launchChromium({ ...opt, autoInstall: true })`;`e2e-*.test.mjs` 一律 `await launchE2eBrowser({ headless: true })`,不直接 launch、不引用 `w-package-tools-e2e/src/launchChromium.mjs`(該套件將移除此匯出).不改用 `w-package-tools-e2e` 之 `launchBrowser`:其多帶六個確定性渲染旗標,會改變渲染;本套件雖無標準圖,仍保持與修前同一組 launch 選項(只多守門功能).
-  3. **本套件 e2e 啟動之瀏覽器種類**:無頭之 headless shell(`headless: true`、不給 `channel`／`executablePath`),不觸發 Windows 登入計數(w-playwright 之執行期登入守門亦只對非 headless shell 啟動才讀).**日後有測試改啟動真 Chrome／Edge／完整 Chromium(`channel`、有頭)者**:每檔最多啟動一次(`before` 起、`after` 關,案例各開 `newContext`)、以 `wpw.findSystemChrome` 判可用性(不以真啟動探測)、跑前後讀目前使用者之錯誤密碼次數(可深層引用 `w-playwright/test/tools/readBadPassword.mjs`;增加即停).
-  4. **接線測試(R-PW-WIRING)**:`unit-e2eLaunch` EL-04(替身接住,在子行程 `test/tools/e2eLaunchChild.mjs` 內以 `wpw.setBrowserTypeForTest` 取代 BrowserType,不啟動瀏覽器:替身被呼叫恰 1 次、命令列恰一串 `--disable-features` 為 `args` 最後元素且含 `AutofillAiWalletPrivatePasses`、`ignoreDefaultArgs` 去掉 Playwright 預設串、無 `ignoreAllDefaultArgs`、headless shell 形態、呼叫端 `args` 保留並併入同一串)與 `api-e2eLaunch` EL-05(替身只記錄、`next()` 走真 Playwright,啟動 headless shell 一次、取版本、關閉).用子行程之因:替身不殘留於 mocha 行程(其餘 e2e 檔同行程真啟動)、啟動點與替身取自同一份 w-playwright.
-- **why**:Chromium 系瀏覽器(真 Chrome 153 起、完整 Chromium、Edge)每啟動一個新根行程即以錯誤密碼替目前 Windows 使用者呼叫一次 `LogonUser`,短時間達門檻即鎖帳號(2026-11-13 已發生);w-playwright 於每次啟動合併出恰一串含 `AutofillAiWalletPrivatePasses` 之 `--disable-features` 並統一 Playwright 版本.原寫法經 `w-package-tools-e2e` 之 `launchChromium` 啟動,不經守門.
-- **盤點指令**(於套件根執行,命中須為 0;正例對照:同指令對 w-playwright 套件之 `src/_pw.mjs`(其必直接匯入 `playwright-core`)須有命中,否則指令無效):
-  - `rg -n --glob '*.{mjs,js}' --glob '!**/node_modules/**' --glob '!**/dist/**' "(from\s+|import\(\s*|require\(\s*)['\"\`]playwright(-core)?['\"\`/]" src test toolg vue.config.js babel.config.js`
-  - `rg -n --glob '**/package.json' --glob '!**/node_modules/**' "\"playwright(-core)?\"\s*:" package.json`
-  - 啟動點全集:`git grep -nE --untracked "wpw\.(launchChromium|launchChromiumPersistent)\(" -- src test`(`test/tools/e2eLaunch.mjs` 一處,其餘為說明文字於 `unit-e2eLaunch`／`api-e2eLaunch`);`git grep -nE --untracked "launchE2eBrowser\(" -- "test/e2e-*.test.mjs"`(9 檔各一處)
-- **測試**:`test/unit-e2eLaunch.test.mjs`(EL-01a～c R-PW-ONLY 含正負例與掃描範圍非空、EL-02a～c 依賴宣告與已安裝版本、EL-03a～d 站點全集、EL-04a～f 接線,共 16 案)、`test/api-e2eLaunch.test.mjs`(EL-05).**變異證明(2026-11-13,`tmp/pm-mlv/mutate.mjs`,逐一破壞後跑 `unit-e2eLaunch`,結束以 sha256 回驗還原)**:M1 啟動點不經 wpw → EL-03d、EL-04a/c/d/e/f 紅;M2 一個 e2e 檔改回舊匯入 → EL-03b、03c 紅;M3 啟動點去掉 `autoInstall` → EL-03d 紅;M4 `package.json` 增 `playwright` → EL-02a 紅;M5 新增檔直接匯入 `playwright` → EL-01c 紅;M6 啟動點丟掉呼叫端選項 → EL-03d、EL-04f 紅;M7 一個 e2e 檔直接 `chromium.launch` → EL-03b 紅;M8 `w-playwright` 降為 `dependencies` → EL-02b 紅.
-- **已知限制**:EL-03b 以原始碼文字判定各 e2e 檔之啟動形狀(`await launchE2eBrowser({ headless: true })`),新增 e2e 檔若有正當理由用別種選項,須同步修該案(逼出審查).
+> R19(e2e 埠)、R20(e2e 啟動瀏覽器經 w-playwright)於 2026-11-19 wml550b 依 sgud 過長整理逐字搬至 `sgud/rule/rulebook_e2e.md`,節號與標題不變.
 
 ## e2e 映射(本套件之落地與偏離)
 

@@ -123,3 +123,12 @@ export async function waitUntilExist(page, label, fn, opts = {}) {
         throw new Error(`waitUntilExist 超過 ${timeout}ms 仍找不到「${label}」`)
     }
 }
+
+// 開範例頁首頁並等 App 掛載完成(進場共用; 其後之點選單、等地圖與元件就緒由各測試檔依其既有條件接續)。
+// 載入條件用 domcontentloaded, 不用 networkidle: 首頁預設範例(size)載入遠端底圖, networkidle 取決於外網, 外網慢時 30 秒逾時(與被測功能無關,
+// 2026-11 批 6 跟跑與 wml550 全套中 displayorder E2E-001、zoomrange E2E-Z16、E2E-Z12b 各現一次)。
+// 就緒以可觀察狀態判定(App.vue 之主選單與子選單項已渲染), 不以固定延時代替。
+export async function gotoApp(page) {
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' })
+    await waitUntilExist(page, 'App 已掛載(主選單與子選單項已渲染)', () => !!document.querySelector('.clsMainMenu-basic') && !!document.querySelector('.clsSubMenu-basic'))
+}
