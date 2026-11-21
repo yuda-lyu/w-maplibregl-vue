@@ -145,11 +145,11 @@ describe('unit-e2eLaunch', function() {
             A.equal((pkg.dependencies || {})['w-' + PW], undefined, '不得列入 dependencies')
         })
 
-        it('EL-02c 已安裝之 w-playwright 版本 >= 1.0.1, 其依賴之 playwright-core 為精確 1.64.1', function() {
+        it('EL-02c 已安裝之 w-playwright 版本 >= 1.0.1, 其依賴之 playwright-core 以精確版號釘選(版本所有權在 w-playwright, 本庫不寫死哪一版)', function() {
             let inst = JSON.parse(fs.readFileSync(path.join(projRoot, 'node_modules', 'w-' + PW, 'package.json'), 'utf8'))
             let v = inst.version.split('.').map(Number)
             A.ok(v[0] > 1 || (v[0] === 1 && (v[1] > 0 || v[2] >= 1)), `已安裝版本 ${inst.version}`)
-            A.equal(inst.dependencies[PW + '-core'], '1.64.1')
+            A.ok(/^\d+\.\d+\.\d+$/.test(inst.dependencies[PW + '-core']), `須為精確版號(實得 ${inst.dependencies[PW + '-core']})`)
         })
     })
 
@@ -222,7 +222,9 @@ describe('unit-e2eLaunch', function() {
 
         it('EL-04b 內附表與實裝之 playwright-core 版本吻合(否則 w-playwright 會拒絕啟動)', function() {
             A.equal(r.tableMatch, true)
-            A.equal(r.coreVersion, '1.64.1')
+            //實裝版本須等於 w-playwright 所釘者(不寫死哪一版; 2026-11-21 升 1.65.1 時之殷鑑)
+            let pin = JSON.parse(fs.readFileSync(path.join(projRoot, 'node_modules', 'w-' + PW, 'package.json'), 'utf8')).dependencies[PW + '-core']
+            A.equal(r.coreVersion, pin)
         })
 
         it('EL-04c 命令列恰一串 --disable-features, 為 args 最後一個元素, 且含守門功能 AutofillAiWalletPrivatePasses', function() {
