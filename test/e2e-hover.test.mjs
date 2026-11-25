@@ -51,7 +51,7 @@
 //   - E2E-017 runtime 更換全域點擊函數: 點 #btnSwapClick 後點擊 circle 點 →
 //               新函數生效, #clickLog 顯示其寫入內容
 import assert from 'assert'
-import launchE2eBrowser from './tools/e2eLaunch.mjs'
+import launchE2eBrowser, { ensureE2eBrowser, PW_INSTALL_BUDGET_MS } from './tools/e2eLaunch.mjs'
 import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -83,6 +83,12 @@ describe('e2e-hover', function() {
     this.timeout(180000)
 
     before(async function() {
+        //首次取得受管瀏覽器(缺檔時於此下載安裝, 時限對齊安裝預算; 排程第 632 項); 其後各案之 launchE2eBrowser 只用已備妥者
+        this.timeout(PW_INSTALL_BUDGET_MS + 60000)
+        await ensureE2eBrowser()
+    })
+
+    before(async function() {
         this.timeout(150000)
         await startServer()
     })
@@ -91,7 +97,7 @@ describe('e2e-hover', function() {
     let page = null
     let cbb = null //canvas boundingBox(viewport 座標)
     beforeEach(async function() {
-        //launchE2eBrowser 經 w-playwright 啟動(守門參數, 規則帳本 R20), 缺 Playwright 指定版本之瀏覽器時首次啟動自動下載(autoInstall, 與本機同版)
+        //launchE2eBrowser 經 w-playwright 啟動(守門參數, 規則帳本 R20); 只用已備妥之瀏覽器(上方第一個 before 之 ensureE2eBrowser 已取得, autoInstall: false)
         browser = await launchE2eBrowser({ headless: true })
         let ctx = await browser.newContext({ viewport: VIEWPORT })
         await routeCdnLocal(ctx) //首頁之外部 script 以本機同版副本回應, 進場不依賴外部 CDN(test/tools/e2eCdnLocal.mjs)

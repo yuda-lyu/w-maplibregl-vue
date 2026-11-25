@@ -29,12 +29,18 @@
 //   J-prev(src/components/WMaplibreglVue.vue previewOverlayOpacity 之 JSDoc): 「以名稱定位疊加層, 只改地圖上該圖層之繪製屬性, 不回寫opt、不重繪面板, 可逐幀呼叫; 拖曳結束時以setOverlayOpacity提交;
 //     val須為0~1之有效數字(數字或數字字串); 回傳true表已套用, 地圖未載入、查無名稱、名稱重複、底圖或style型別、圖層尚未加入、值無效或超出0~1時回傳false」
 import assert from 'assert'
-import launchE2eBrowser from './tools/e2eLaunch.mjs'
+import launchE2eBrowser, { ensureE2eBrowser, PW_INSTALL_BUDGET_MS } from './tools/e2eLaunch.mjs'
 import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
 describe('e2e-opacity', function() {
     this.timeout(180000)
+
+    before(async function() {
+        //首次取得受管瀏覽器(缺檔時於此下載安裝, 時限對齊安裝預算; 排程第 632 項); 其後各案之 launchE2eBrowser 只用已備妥者
+        this.timeout(PW_INSTALL_BUDGET_MS + 60000)
+        await ensureE2eBrowser()
+    })
 
     before(async function() {
         this.timeout(150000)

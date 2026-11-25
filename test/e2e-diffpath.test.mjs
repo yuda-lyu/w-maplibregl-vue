@@ -23,7 +23,7 @@
 import assert from 'assert'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import launchE2eBrowser from './tools/e2eLaunch.mjs'
+import launchE2eBrowser, { ensureE2eBrowser, PW_INSTALL_BUDGET_MS } from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==', 'base64')
@@ -32,6 +32,12 @@ const CORS = { 'access-control-allow-origin': '*', 'content-type': 'image/png' }
 
 describe('e2e-diffpath', function() {
     this.timeout(180000)
+
+    before(async function() {
+        //首次取得受管瀏覽器(缺檔時於此下載安裝, 時限對齊安裝預算; 排程第 632 項); 其後各案之 launchE2eBrowser 只用已備妥者
+        this.timeout(PW_INSTALL_BUDGET_MS + 60000)
+        await ensureE2eBrowser()
+    })
 
     before(async function() {
         this.timeout(150000)

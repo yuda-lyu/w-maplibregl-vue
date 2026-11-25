@@ -28,7 +28,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { PNG } from 'pngjs'
-import launchE2eBrowser from './tools/e2eLaunch.mjs'
+import launchE2eBrowser, { ensureE2eBrowser, PW_INSTALL_BUDGET_MS } from './tools/e2eLaunch.mjs'
 import { copyToCopy, runNodeInCopy } from './tools/toolgCopy.mjs'
 
 //以模組位置定位(不依執行目錄)
@@ -105,6 +105,12 @@ function countPointPixels(buf) {
 
 describe('e2e-fileprotocol', function() {
     this.timeout(180000)
+
+    before(async function() {
+        //首次取得受管瀏覽器(缺檔時於此下載安裝, 時限對齊安裝預算; 排程第 632 項); 其後各案之 launchE2eBrowser 只用已備妥者
+        this.timeout(PW_INSTALL_BUDGET_MS + 60000)
+        await ensureE2eBrowser()
+    })
 
     before(async function() {
         this.timeout(300000)

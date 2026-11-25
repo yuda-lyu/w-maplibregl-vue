@@ -51,7 +51,7 @@
 //   - E2E-Z18~Z21 開啟地形(離線平坦 DEM)之代表案例: 連按放大鈕不彈回、同 tick center+zoom、範圍拉入+center、平移動畫中改 zoom
 import assert from 'assert'
 import { PNG } from 'pngjs'
-import launchE2eBrowser from './tools/e2eLaunch.mjs'
+import launchE2eBrowser, { ensureE2eBrowser, PW_INSTALL_BUDGET_MS } from './tools/e2eLaunch.mjs'
 import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -77,6 +77,12 @@ function colorRatio(buf, rgb) {
 
 describe('e2e-zoomrange', function() {
     this.timeout(180000)
+
+    before(async function() {
+        //首次取得受管瀏覽器(缺檔時於此下載安裝, 時限對齊安裝預算; 排程第 632 項); 其後各案之 launchE2eBrowser 只用已備妥者
+        this.timeout(PW_INSTALL_BUDGET_MS + 60000)
+        await ensureE2eBrowser()
+    })
 
     before(async function() {
         this.timeout(150000)

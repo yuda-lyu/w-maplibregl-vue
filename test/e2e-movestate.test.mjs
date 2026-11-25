@@ -32,7 +32,7 @@
 // 圖磚: 範例頁以 maplibregl.addProtocol('e2ems') 供應單色圖磚, 永不連外。
 // 標準圖政策: 依規則帳本〈e2e 映射〉無跨 run 標準圖(語意斷言)。無 i18n, 單一變體。每個 it() 各自 new browser。
 import assert from 'assert'
-import launchE2eBrowser from './tools/e2eLaunch.mjs'
+import launchE2eBrowser, { ensureE2eBrowser, PW_INSTALL_BUDGET_MS } from './tools/e2eLaunch.mjs'
 import { baseUrl, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -42,6 +42,12 @@ const POSE_FRAMES = 40 //idle 後累計影格數(約 0.7s @60Hz)內位姿須不�
 
 describe('e2e-movestate', function() {
     this.timeout(180000)
+
+    before(async function() {
+        //首次取得受管瀏覽器(缺檔時於此下載安裝, 時限對齊安裝預算; 排程第 632 項); 其後各案之 launchE2eBrowser 只用已備妥者
+        this.timeout(PW_INSTALL_BUDGET_MS + 60000)
+        await ensureE2eBrowser()
+    })
 
     before(async function() {
         this.timeout(150000)

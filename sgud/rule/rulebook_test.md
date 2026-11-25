@@ -11,7 +11,7 @@
 - **站點補充(2026-11-06 ma327)**:`test/unit-diffpath.test.mjs`(UD1–UD12,12 案;R8 修訂:僅 `name`、僅地形倍率之就地路徑)、`test/e2e-diffpath.test.mjs`(E2E-D1–D6,6 案;以第二個元件實例〔父層持有響應式 `opt`〕加 `page.route` 計數圖磚與 DEM 請求,不動範例頁;D6 例外取範例頁 `runtimeSync` 之 `#btnTerrainTune` 證明其觸發整組重套,保護 `e2e-runtime` E2E-012 之前提——E2E-012 之 hillshade 疊序於初始載入即成立,不論是否重套皆綠,單靠它驗不到重套).
 - **站點補充(2026-11-07 mv329b,排程第 329 項)**:`test/tools/e2eCdnLocal.mjs`(e2e 外部 script 本機副本:`CDN_LOCAL` 對照、`findExternalResources`/`findUnmapped`、`loadCdnLocal`、`routeCdnLocal(ctx)`)、`test/unit-e2eCdnLocal.test.mjs`(CL1–CL4,4 案)、`test/fixtures/cdn/w-demores-1.0.36/`(`dataRain.js` 85352 B、`dataRainClip.js` 5608 B);`e2e-movestate` 增 M8b、M8c、M8d(共 26 案).
 - **站點補充(2026-11-19 wml550b)**:`test/unit-e2eGoto.test.mjs`(G1–G3,3 案,規則盤點;見下〈e2e 進場載入條件〉)、`test/tools/e2e-setup.mjs` 新增匯出 `gotoApp(page)`.
-- **站點補充(2026-11-13 pm-mlv,排程第 442 項)**:`test/tools/e2eLaunch.mjs`(e2e 唯一啟動點,經 w-playwright)、`test/tools/e2eLaunchChild.mjs`(接線測試之子行程配套)、`test/unit-e2eLaunch.test.mjs`(EL-01～EL-04,16 案)、`test/api-e2eLaunch.test.mjs`(EL-05,1 案;啟動 headless shell 一次);R20.
+- **站點補充(2026-11-13 pm-mlv,排程第 442 項)**:`test/tools/e2eLaunch.mjs`(e2e 唯一啟動點,經 w-playwright)、`test/tools/e2eLaunchChild.mjs`(接線測試之子行程配套)、`test/unit-e2eLaunch.test.mjs`(EL-01～EL-04,16 案;2026-11-25 tml632 增 EL-03e/03f、EL-06a～i,共 27 案)、`test/api-e2eLaunch.test.mjs`(EL-05、EL-05b,2 案;取得並啟動 headless shell 一次);R20.2026-11-25 tml632(排程第 632 項):`e2eLaunch.mjs` 另匯出 `PW_INSTALL_BUDGET_MS`、`createEnsureE2eBrowser`、`ensureE2eBrowser`(取得受管瀏覽器集中於一處、時限對齊安裝預算),`e2eLaunchChild.mjs` 增 `missing` 模式.
 - **e2e 外部 script 本機副本(2026-11-07 mv329b,主控裁定)**:
   - **要求**:e2e 進場不依賴外部 CDN.範例頁 `public/index.html` 之同步外部 script 一律於 e2e 之瀏覽器情境以 `ctx.route` 回應本機同版副本(`routeCdnLocal(ctx)`,於 `newContext` 後呼叫);副本優先取 `node_modules` 內對應套件之產物,無對應套件者放 `test/fixtures/cdn/<套件>-<版本>/`(不新增 ≥ 1MB 之檔);首頁有未列於 `CDN_LOCAL` 之外部 script/stylesheet、或副本檔不存在即拋錯(不靜默回退外網).範例頁對一般使用者之載入方式不變.
   - **why**:2026-11-07 `yuda-lyu.github.io` 一度 60 秒未下載完,`page.goto(domcontentloaded)` 於進場 30 秒逾時,與被測功能無關.
@@ -35,7 +35,7 @@
 | e2e 啟動輔助與埠(`test/tools/e2e-setup.mjs`、`e2ePorts.mjs`;R19 見 `rulebook_e2e.md`) | `unit-e2ePortReserve`、`unit-e2eGoto`;並任選一 e2e 檔實跑 |
 | e2e 進場(`e2e-setup.mjs` 之 `gotoApp`、首頁載入條件) | `unit-e2eGoto`;經 `gotoApp` 進場之 6 檔(`e2e-basemapzoom`、`e2e-displayorder`、`e2e-hover`、`e2e-opacity`、`e2e-runtime`、`e2e-zoomrange`) |
 | e2e 外部 script 本機副本(`test/tools/e2eCdnLocal.mjs`、`test/fixtures/cdn/`、`public/index.html` 之外部 script) | `unit-e2eCdnLocal`;套用之 7 個 e2e 檔(見上〈e2e 外部 script 本機副本〉)或全套 |
-| e2e 啟動點(`test/tools/e2eLaunch.mjs`、`e2eLaunchChild.mjs`)、`package.json` 之 `w-playwright` 版本、`w-playwright` 升版 | `unit-e2eLaunch`、`api-e2eLaunch`(R20);並任選一 e2e 檔實跑(改共用基礎即全套) |
+| e2e 啟動點與取得瀏覽器(`test/tools/e2eLaunch.mjs`、`e2eLaunchChild.mjs`、各 e2e 檔第一個 `before` 之 `ensureE2eBrowser`)、`package.json` 之 `w-playwright` 版本、`w-playwright` 升版 | `unit-e2eLaunch`、`api-e2eLaunch`(R20);並任選一 e2e 檔實跑(改共用基礎即全套);改取得之時限或失敗行為另以空夾＋限速鏡像驗收(R20 要求 6) |
 
 - **已修(2026-11-05 wm309,R19)**:`test/tools/e2e-setup.mjs` 之 `stopServer` 原以非同步 `spawn('taskkill')`,exit/SIGINT/SIGTERM 備援路徑實測無效(`process.exit`、SIGINT 後真實 `npx vue-cli-service` 殘留,2026-11-05 以 `tmp/wm309/exitpath.mjs` 重現),Ctrl+C 或 `mocha --exit` 後 dev server 會殘留;導入自動換埠後殘留者不再被「埠通即沿用」重用而每次多占一組埠,故改為同步 `spawnSync('taskkill …')`(只殺自己 spawn 的行程樹),`unit-e2ePortReserve` PR-013 守護(修前紅:shell 鏈替身於 `process.exit` 後殘留;修後綠).
 
@@ -47,7 +47,7 @@
 |---|---|---|
 | runner | mocha `npm test`,逐檔同一程序 | — |
 | 服務 | `test/tools/e2e-setup.mjs`:`vue-cli-service serve --port <實際埠>`(基準埠 8123 空閒即 8123,指令列同導入前;被占用則整組位移,實際埠印入輸出 `[e2e-port]`);**埠上已有人監聽不沿用**:自動換埠下(保留後被占走)拋錯寫明占用者,手動鎖埠(`E2E_PORT_OFFSET` 已設)下須確認監聽者確為本專案之 `vue-cli-service` 才沿用(R19;導入前為「port 被佔則 reuse」,不問身分,會打到別人的服務) | 無共用埠位移以外之偏離;本套件只有前端 dev server 一個埠,無後端、redirect、CORS、種子之衍生埠 |
-| 啟動 | `test/tools/e2eLaunch.mjs` 之 `launchE2eBrowser({ headless: true })`(= `wpw.launchChromium({ ...opt, autoInstall: true })`,經 w-playwright;headless shell),每 `it()` 新瀏覽器(R20;2026-11-13 起,原為 `w-package-tools-e2e/src/launchChromium.mjs`) | 不同檔共用瀏覽器(設計 §5.2 只要求真 Chrome／Edge／完整 Chromium 每檔最多啟動一次,headless shell 共用屬選做);維持 per-case fresh(e2e 技能 §6) |
+| 啟動 | `test/tools/e2eLaunch.mjs` 之 `launchE2eBrowser({ headless: true })`(= `wpw.launchChromium({ ...opt, autoInstall: false })`,經 w-playwright;headless shell),每 `it()` 新瀏覽器(R20;2026-11-13 起,原為 `w-package-tools-e2e/src/launchChromium.mjs`);受管瀏覽器由各檔第一個 `before` 之 `ensureE2eBrowser()` 集中取得(2026-11-25 起,時限為 `PW_INSTALL_BUDGET_MS`＋60 秒;原為啟動時 `autoInstall: true` 於案內隱性安裝) | 不同檔共用瀏覽器(設計 §5.2 只要求真 Chrome／Edge／完整 Chromium 每檔最多啟動一次,headless shell 共用屬選做);維持 per-case fresh(e2e 技能 §6) |
 | 外部 script | 範例頁首頁之同步外部 script 於 e2e 由 `routeCdnLocal(ctx)` 回應本機同版副本(R5〈e2e 外部 script 本機副本〉) | 2026-11-07 起;`e2e-diffpath` 以其 `**/*` 攔截 abort 外部請求、`e2e-fileprotocol` 無外部 script,皆不套用 |
 | 語系 | 無 i18n,單一變體 | — |
 | 標準圖 | **無跨 run 標準圖**;以當次 in-memory 區域取樣(前後比對或色彩比例)與 style 快照為斷言 | 本套件為元件庫、無操作手冊用圖;地圖畫面為 WebGL 畫布,圖磚以 data URI 或頁內自訂協定供應而離線決定性,語意(顏色出現/消失、請求計數)即可判定;既有三檔沿用此政策 |

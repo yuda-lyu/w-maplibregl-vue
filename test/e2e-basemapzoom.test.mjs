@@ -29,7 +29,7 @@
 //               點 #btnSetMaxzoom → 取樣區轉為藍色, 其後 #overBlue 不再增加; source.maxzoom===18(補強)
 import assert from 'assert'
 import { PNG } from 'pngjs'
-import launchE2eBrowser from './tools/e2eLaunch.mjs'
+import launchE2eBrowser, { ensureE2eBrowser, PW_INSTALL_BUDGET_MS } from './tools/e2eLaunch.mjs'
 import { gotoApp, startServer, waitUntilExist } from './tools/e2e-setup.mjs'
 import { routeCdnLocal } from './tools/e2eCdnLocal.mjs'
 
@@ -50,6 +50,12 @@ function colorRatio(buf, rgb) {
 
 describe('e2e-basemapzoom', function() {
     this.timeout(180000)
+
+    before(async function() {
+        //首次取得受管瀏覽器(缺檔時於此下載安裝, 時限對齊安裝預算; 排程第 632 項); 其後各案之 launchE2eBrowser 只用已備妥者
+        this.timeout(PW_INSTALL_BUDGET_MS + 60000)
+        await ensureE2eBrowser()
+    })
 
     before(async function() {
         this.timeout(150000)
