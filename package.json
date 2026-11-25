@@ -1,6 +1,6 @@
 {
   "name": "w-maplibregl-vue",
-  "version": "1.0.102",
+  "version": "1.0.103",
   "main": "dist/w-maplibregl-vue.umd.js",
   "dependencies": {
     "maplibre-gl": "6.19.0",
@@ -22,8 +22,8 @@
     "vue": "^2.7.16",
     "w-jsonview-tree": "^1.0.47",
     "w-package-tools": "^1.1.31",
-    "w-package-tools-e2e": "^1.0.54",
-    "w-playwright": "^1.0.5"
+    "w-package-tools-e2e": "^1.0.55",
+    "w-playwright": "^1.0.6"
   },
   "scripts": {
     "serve": "vue-cli-service serve",
