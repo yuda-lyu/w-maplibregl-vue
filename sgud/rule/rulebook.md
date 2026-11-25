@@ -10,7 +10,8 @@
 
 | 類型 | 檔 | 收錄節 | 何時查 |
 | --- | --- | --- | --- |
-| 依賴、建置與 worker 載入 | `rulebook_build.md` | R1、R2、R3、R4、R17、〈破壞性變更紀錄:maplibre-gl 5.24.0 → 6.x〉 | 改 `package.json` 之 maplibre-gl 版號、`mapCore.mjs` 之 worker 設定、建置腳本或 `script.txt`、file:// 或 sandbox iframe 載入問題、升 maplibre-gl 大版時查 |
+| 依賴、建置與 worker 載入 | `rulebook_build.md` | R1、R2、R3、R4、R17 | 改 `package.json` 之 maplibre-gl 版號、`mapCore.mjs` 之 worker 設定、建置腳本或 `script.txt`、file:// 或 sandbox iframe 載入問題時查 |
+| maplibre-gl 升版之破壞性變更紀錄 | `rulebook_upgrade.md` | 〈破壞性變更紀錄:maplibre-gl 5.24.0 → 6.x〉、〈6.14.0 → 6.16.0〉、〈6.16.0 → 6.18.0〉、〈6.18.0 → 6.19.0〉(2026-11-25 tml619 自 `rulebook_build.md` 逐字搬移並增 6.19.0 節) | 升 maplibre-gl(任何版本)前後查:上次逐項核對之影響清單、並排探測作法與數據、日後升版須重評項 |
 | 測試配置與 e2e | `rulebook_test.md` | R5(含〈e2e 外部 script 本機副本〉、〈e2e 進場載入條件〉)、〈e2e 映射(本套件之落地與偏離)〉 | 新增或改測試檔、跑測試、改 e2e 進場(首頁載入條件、`gotoApp`)、查 e2e 映射與偏離時查 |
 | e2e 埠與啟動瀏覽器 | `rulebook_e2e.md` | R19、R20(2026-11-19 wml550b 自 `rulebook_test.md` 逐字搬移) | 改 e2e 啟動輔助(`e2e-setup.mjs` 之 `startServer`、`e2ePorts.mjs`)、基準埠或埠位移、啟動瀏覽器(經 w-playwright,R20)時查 |
 | 底圖、地形與疊加層 | `rulebook_basemap.md` | R6、R7、R8、R9、R10、R14、R18 | 改 `basemapManager.mjs`、`defBaseMaps.mjs`、`defTerrainMap.mjs`、底圖/地形/疊加層欄位或其執行期變更之差異判斷(含僅 `name`、僅地形倍率之就地路徑)、`previewOverlayOpacity` 時查 |
