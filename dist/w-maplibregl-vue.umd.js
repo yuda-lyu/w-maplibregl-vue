@@ -1,5 +1,5 @@
 /*!
- * w-maplibregl-vue v1.0.105
+ * w-maplibregl-vue v1.0.106
  * (c) 2018-2021 yuda-lyu(semisphere)
  * Released under the MIT License.
  */
