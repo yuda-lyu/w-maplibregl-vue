@@ -23,6 +23,11 @@
 > - 升 maplibre-gl 6.14.0 → 6.16.0 之經驗(2026-11-09 ml01,規則帳本 R1、R17)
 > - 升 maplibre-gl 6.16.0 → 6.18.0 之經驗(2026-11-19 wml550,規則帳本 R1、R17)
 
+> **2026-11-27 抽出舊經驗**:下列 3 節(2026-11-19~11-25)已抽出至 `sgud/exp/experience_20261127.md`,節號與標題不變(2026-11-25 之抽出說明所稱「本檔〈升 maplibre-gl 6.18.0 → 6.19.0 之經驗〉」現亦在該檔):
+> - e2e 進場載入條件改 domcontentloaded 之經驗(2026-11-19 wml550b,規則帳本 R5〈e2e 進場載入條件〉)
+> - e2e 取得受管瀏覽器之經驗(2026-11-25 tml632,排程第 632 項,規則帳本 R20 要求 5、6)
+> - 升 maplibre-gl 6.18.0 → 6.19.0 之經驗(2026-11-25 tml619,規則帳本 R1)
+
 ## 建置流程(script.txt)
 
 - **`gDistApp.mjs` 會清空 `docs/examples/`**(`rollupVueToHtml` 所致),116 個 `ex-*.html` 須由其後之 `gExtractHtml.mjs` + `gDocExams.mjs` 重建.**驗證時不可只挑部分步驟跑**,否則 docs 被刪(2026-10-01 曾發生,補跑兩步後恢復).只需驗 dist 時只跑 `gDistRollupComps.mjs`(僅寫 dist).
@@ -56,39 +61,15 @@
 - **對照組須連同範例頁與測試輔助一併換回**(2026-10-31 map30c;map30 誤判之成因):判斷既有 e2e 之紅燈是否由本輪改動造成,對照組要把整個 `src/`(範例頁、元件、輔助)與 `test/` 換回 HEAD(`git archive HEAD` 解到 `./tmp/` 另裝依賴),只換元件 `.vue` 時範例頁之改動(此例為選單多一項)仍留在對照組內,測不出真正的變因.map30 因此誤記「HEAD 元件同樣紅、與本輪無關」與「根因未診斷、疑環境或圖磚」,實際是本輪之 `App.vue` 間接造成.查證時用因子化對照(依賴 × 源碼 × 單一檔單一字串),找出「必要且充分」之最小變因,不以「換回一部分仍紅」推論無關.
 - **Playwright 版本與瀏覽器 revision 不符**:如 playwright 1.61.1 需 chromium 1228 而本機僅有新版 revision,三檔全數於 `chromium.launch` 失敗.以 `node node_modules/playwright/cli.js install chromium` 補裝(不用 cd、確保用專案內版本).〔2026-11-13 起 e2e 經 w-playwright 啟動;2026-11-25 起(排程第 632 項)受管瀏覽器由各檔第一個 `before` 之 `ensureE2eBrowser()` 集中取得(`wpw.ensureChromium({ timeout })`,缺檔時下載安裝),`launchE2eBrowser` 為 `autoInstall: false`;要預先取得用 `wpw.ensureChromium()`,不用 `npx playwright install` 或上列 `cli.js`,見 R20 要求 5.〕
 
-## e2e 進場載入條件改 domcontentloaded 之經驗(2026-11-19 wml550b,規則帳本 R5〈e2e 進場載入條件〉)
+## e2e 埠單元測試之 `noteOwn` 完成同步(2026-11-27 m674、m674b,排程第 674 項,規則帳本 R19 要求 8)
 
-- **`networkidle` 描述的是網路,不是 App 就緒**:首頁預設範例(size)載入遠端底圖,外網慢時 30 秒逾時;3 次獨立偶發(批 6 跟跑 `e2e-zoomrange` Z16、wml550 全套 `e2e-displayorder` E2E-001 與 `e2e-zoomrange` Z12b)皆時敗時過、重跑皆綠.修法同 `e2e-movestate`:`domcontentloaded` 後以 DOM 可觀察狀態判定 App 掛載(`gotoApp`:主選單與子選單項已渲染),抽到 `test/tools/e2e-setup.mjs` 共用,6 檔 7 處不各寫一份;`e2e-movestate`、`e2e-diffpath` 之行內 `domcontentloaded` 寫法維持(本即不依賴外網).
-- **「不等待就緒」之變異在 e2e 層不轉紅,因為 Playwright 之 `click()`(及 `boundingBox()`、`innerText()` 等 locator 動作)自帶自動等待,且各檔又有自己之等待**:把 `gotoApp` 改成 `waitUntil: 'commit'` 且不等選單,於外網掛住之環境下 7 個代表案例仍 7/7 綠.因此 `gotoApp` 之選單等待是**標示用**(失敗訊息指向「App 未掛載」而非泛泛之 click 逾時),不是鑑別力之來源;要證明 `gotoApp` 不依賴外網,須改用下一條之注入法.
-- **有鑑別力之驗證 = 注入「外網掛住」,而非等外網偶發**:在 `routeCdnLocal` 開頭暫加 `await ctx.route((u) => u.protocol.startsWith('http') && u.hostname !== '127.0.0.1' && u.hostname !== 'localhost', () => new Promise(() => {}))`(**必須註冊於 CDN 副本路由之前**:Playwright 後註冊之路由優先,先註冊者才只接住副本以外之請求;反序則連 5 支外部 script 都被掛住,首頁停在 DOMContentLoaded 之前).對照組(真 `gotoApp` + 同注入)7/7 綠——證明各目標範例本身不連外;變異 M1(`gotoApp` 改回 `networkidle`)7/7 於 `page.goto: Timeout 30000ms exceeded` 轉紅,與原偶發失敗訊息完全相同;M2(`domcontentloaded` 後加 `waitForLoadState('networkidle')`)7/7 轉紅.代表案例:`e2e-basemapzoom` E2E-A、`e2e-displayorder` E2E-001、`e2e-hover` E2E-001、`e2e-opacity` E2E-O1、`e2e-runtime` E2E-001、`e2e-zoomrange` Z10(走主選單之第二站點)與 Z12b(曾失敗者);腳本 `tmp/wml550b/mut-run.mjs`(用後清除),暫改檔以 sha256 對暫存之原檔回驗已還原.注入碼不入版控(避免測試輔助多一個故障開關).
-- **規則盤點測試(`unit-e2eGoto` G1–G3)承擔結構面之鑑別**:變異 M3(不等待就緒)→ G3 紅;M6(helper 內 `networkidle`)→ G1、G3 紅;M7(移除 `waitUntilExist`)→ G3 紅;M8(一處改回 `page.goto(baseUrl, { waitUntil: 'networkidle' })`)→ G1、G2 紅.單元測試不 import `e2e-setup.mjs`(模組頂層保留埠),以去註解後之原始碼文字比對.
-- **同類寫法盤點**:`git grep -n "networkidle" -- test` 程式碼命中 0;`waitUntil: 'load'` 僅 `e2e-fileprotocol`(自有測試頁,不連外).連跑結果:6 檔各連跑 3 次 18/18 全綠(basemapzoom 2、displayorder 2、hover 17、opacity 8、runtime 15、zoomrange 39 案).
-
-## e2e 取得受管瀏覽器之經驗(2026-11-25 tml632,排程第 632 項,規則帳本 R20 要求 5、6)
-
-- **安裝發生在哪個 hook 要實查,不要信任務書**:任務書寫「`before` 之 150 秒短於安裝」,實際 `before` 只做 `startServer`;安裝在每檔第一個案之 `beforeEach` 內(`launchE2eBrowser` 帶 `autoInstall: true`),受 describe 層 `this.timeout(180000)`.查法:讀各檔 `before`/`beforeEach` 與 w-playwright `_launchCore.mjs` 之 `launchWithInstall`(缺檔且 `autoInstall` 為真時以 timeout 0 呼叫安裝)。
-- **自然環境不重現逾時**:本機網路下 headless shell 安裝僅約 3 秒(以 `chromium_headless_shell-*` 夾之建立時間與 `INSTALLATION_COMPLETE` 之修改時間量得)。要得到「修前紅」須模擬慢網路:空 `PLAYWRIGHT_BROWSERS_PATH`＋限速鏡像(`PLAYWRIGHT_DOWNLOAD_HOST` 指到本機小程式,轉到 `https://cdn.playwright.dev/<path>` 並限速)。zip 129,830,431 B,500 KB/s 約 288 秒 > 180 秒。鏡像必須**跟隨 307**(cdn 轉到 `storage.googleapis.com`,Playwright 不會替鏡像追轉址之後仍限速);`PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST` 若已設會蓋過 `PLAYWRIGHT_DOWNLOAD_HOST`。`playwright-core/cli.js install --dry-run --only-shell chromium` 可印出各項下載網址而不下載。
-- **舊寫法逾時後之連帶現象**:hook 逾時只讓 mocha 判該 hook 失敗並跳過其餘案,安裝子行程與懸置之 `launchE2eBrowser` 不被取消——安裝完成後該 launch 真的開出一個無人關閉之 headless shell,mocha 行程因此不退出,須手動結束行程樹。
-- **「安裝恰 1 次」之證據用計數,不用「沒再看到安裝」**:①鏡像紀錄(每個下載項恰 1 筆完成之請求:zip、ffmpeg、winldd);②`ensureE2eBrowser()` 完成時印之一行(安裝程序 1 次、下載動作 3 次);③空夾內三個項目夾皆有 `INSTALLATION_COMPLETE`。下載動作次數依 Playwright 輸出之 `Downloading` 行計,`npm_config_loglevel` 為 silent／error／warn 時 Playwright 不輸出而恆為 0(紀錄行已註明,以鏡像紀錄為準)。
-- **`ensureChromium` 之錯誤只有離開碼**:DNS 失敗、404、磁碟滿等真因只在子行程輸出(`funLog('install-output')`),取得函式須自行收末段附在錯誤訊息並以 `cause` 保留原錯誤,否則慢網路／離線出事時只看到 `exit code 1`。
-- **不保留 `autoInstall: true` 作防呆**:它使漏掉取得之新 e2e 檔仍在案內靜默安裝(無逾時),重演逾時;改 `false` 後缺檔即 `E_BROWSER_MISSING` 立即失敗,並以 EL-03e(各檔第一個 `before` 之形狀與順序)與 EL-06h(真 w-playwright、空夾、兩個下載主機變數皆指向不通位址,缺檔須立即失敗且夾內無產物)守住。
-- **靜態文字判定之邊界**:EL-03e 以 strip 註解後之正則判定,會誤判(句尾分號、`describe` 前之輔助函式含 `launchE2eBrowser(`)但不漏判已驗證之破壞形狀(19 項變異,含 `describe.skip`)。獨立複審(sonnet)以記憶體內變異另找出漏判 `describe.skip/only` 與 EL-06f 分不出計 `install-start` 或 `install-done`,皆已補。
-- **`du -sh node_modules` 在全套執行中會與測試搶磁碟且逾時**:判斷 `node_modules` 規模時不用 `du`(Defender 掃描下 120 秒仍不完),改看依賴數或以 `npm ls --depth=0`。
-
-## 升 maplibre-gl 6.18.0 → 6.19.0 之經驗(2026-11-25 tml619,規則帳本 R1)
-
-(前兩次升版之經驗〔6.14.0 → 6.16.0、6.16.0 → 6.18.0〕已抽出至 `sgud/exp/experience_20261125.md`;影響清單與探測數據見 `sgud/rule/rulebook_upgrade.md`〈破壞性變更紀錄:maplibre-gl 6.18.0 → 6.19.0〉.)
-
-- **U52/U53 這次沒有紅,先跑再判斷、不為「上次紅」而預先改檢查式**:6.19.0 之 `workerFactory`、`isClassicWorkerUrl`、`isCrossOrigin` 與 6.18.0 相同(把 `maplibre-gl.mjs` 內 `WORKER_URL` 附近各處之識別字全換成固定字樣後逐字相同:`sed 's/[A-Za-z_$][A-Za-z0-9_$]*/X/g'` 後 `diff` 無差異;獨立複審另將 `isCrossOrigin` 至 `workerFactory` 整段〔1383 與 1395 字元〕依識別字對照改名後逐字比對,唯一差異是 `createWorker` 於 `new Worker` 前多一次 `createScriptURL`〔#9068 Trusted Types;未設政策時為恆等函式,本套件不設〕);該函式本體不在 U52 任何正則內(6.18.0 亦然),宿主頁面若設了 Trusted Types 政策,政策會收到本套件之 data:/blob: URL,拒絕時於 `try` 之外拋錯,U52/U53 不會察覺——現況無此使用情境,未加檢查,列為選配.
-- **本次差異在內部架構而非公開 API**:#8694 移除 `Transform` 類別、相機狀態集中到 zustand store(兩版 `src/` 差異 175 項,新增 `camera/` 31 檔).「本庫 `src/` 無 `transform` 命中」只證明沒有直接存取,不證明行為不變;找影響之順序:①取 CHANGELOG 該節(發布包不含 CHANGELOG,本機無 `gh`;`curl https://raw.githubusercontent.com/maplibre/maplibre-gl-js/v<版>/CHANGELOG.md` 可取,節內以 `awk '/^## 6.19.0/{f=1} /^## 6.18.0/{f=0} f'` 截出);②兩版 `npm pack` 解開,比對 `src/`(`diff -rq` 先看檔級增刪)與 `dist/maplibre-gl.d.ts`(`Map$1` 類別之公開成員);③以 Grep `-o` 列出本套件實際呼叫之 `map.xxx(` 與私有欄位(`map._delegatedListeners` 唯一)逐一對照;④並排探測證明行為(下)。`Map` 兩版皆無公開 `transform`;`map._camera.transform`(`@internal`)6.19.0 移除,改為 `_store`.
-- **並排探測之陷阱(下次直接沿用 `tmp` 內作法,但先避開這些)**:
-  - **容器 `id="map"` 使 `window.map` 為該 DIV**:`window.map.remove()` 把容器自頁面移除,下一次建圖報 `Container 'map' not found`;地圖實例改存 `window.__m`.
-  - **「0 處不同」可能是兩邊同樣出錯**:`map.project()` 回傳 `Point`(`{x,y}`),無 `toArray()`,包在 try/catch 時兩版得相同錯誤字串,位姿與投影比對空轉;事件紀錄器內呼叫不存在之 `map.isEasing()`(`Map` 無此方法)使 `movestart`/`moveend`/`idle` 全不入紀錄,事件比對亦空轉.**比對前先確認結果裡有預期之真值(非錯誤字串、事件數 > 0)**,每個場景附「非空洞」抽查(本輪補 I、J 場景時列出各層數量)。
-  - 6.x 已無 `getFreeCameraOptions`/`setFreeCameraOptions`(改為 `calculateCameraOptionsFromTo`、`calculateCameraOptionsFromCameraLngLatAltRotation`、`calculateAnchoredCameraOptions`);誤用舊 API 兩版皆拋錯而空轉.
-  - **`idle` 只在「由忙轉閒」時發一次**:已 idle 之地圖呼叫 `triggerRepaint()` 不會再發 `idle`,`once('idle')` 必須配逾時,否則掛住(本輪第一版手勢場景因此卡住 10 分鐘以上才被終止).
-  - **事件序列比對之噪音**:連續型事件(`move`/`zoom`/`rotate`/`pitch`/`roll`/`drag`)之交錯與次數隨影格而變,收斂為單一記號再比;起訖事件與當下之 `isMoving`/`isZooming`/`isRotating` 逐項比;每個動作 3 次重複並**先量版本內差異再比跨版本**;被中斷之動作(`sleep` 100~150 ms 後下新指令)終值隨動畫進度而變,版本內即不同,不是版本差異.
-  - **渲染比對**:`preserveDrawingBuffer: true` 加 `gl.readPixels` 可得整張畫布之 FNV 雜湊與分色像素計數;`fadeDuration: 0` 使放置(placement)於數個影格內落定而可重現,但與本套件實際設定(預設淡入、`antialias: true`)不同,另以 J 場景用本套件之設定(`antialias`、`attributionControl: false`、`minZoom`/`maxZoom`、`load` 後自動投影、`zoomend` 再套、於 `projectiontransition`/`zoomend`/`moveend` 事件當下讀 `getZoom`/`getCenter`/`isMoving`)比對事件序列.
-  - **文字圖層需字型伺服器**:Playwright 路由以手工編碼之 protobuf(`glyphs{ stacks{ name, range, glyphs{ id, bitmap, width, height, left, top, advance } } }`,欄位 1/2/3,`sint32` 需 zigzag)供應合成字形(每個 ASCII 可印字元一塊實心方塊,含 3 px SDF 緩衝),即可比對 `text-halo`、`text-variable-anchor`、`text-overlap`、線上標籤與叢集計數之渲染;空回應不行(無字形即不繪)。
-  - **真手勢**(Playwright 滑鼠鍵盤與觸控 `tap`)之慣性終值隨滑鼠移動間隔而變(快速拖曳 3 次中有 1 次終值較遠),結論須以版本內重複次數支持:K 場景快速拖曳 20 次量分佈.
-- **6.18.0 之 `setMaxBounds` 缺陷(#9022)會損壞相機狀態**:`setMaxBounds([[-180,-60],[180,60]])` 於 6.18.0 拋 `Cannot read properties of null (reading '0')`,其後 `getBounds` 得 ±180、`project` 得 NaN,渲染迴圈連續拋錯;探測腳本把此步放在一條序列中段,使其後所有步驟皆「不同」而蓋過真正之比對——**會損壞狀態之探測步驟放在序列最後或獨立地圖**(本輪第一次 A 因此全部後段步驟誤報不同).
-- **發布包配置全套之沙箱**:`npm pack` 之 tarball(380 檔,5.8 MB)解開後自建 `node_modules`,以鎖檔 `npm ci`;使用者之 npm 設定有 `min-release-age`(7 天冷卻)時,鎖檔所釘之自有套件新版會 `ETARGET`(`No matching version found for wsemi@x with a date before …`),該次安裝加 `--min-release-age=0`(版本由鎖檔釘住,不放寬任何範圍);`npm ci` 失敗後 `node_modules` 殘留空殼,重跑前先確認(`robocopy /L` 列舉模式)再重裝。
+- **經過**:m674 時 `w-package-tools-e2e` 1.0.59 之 `reservation.noteOwn` 回傳 `undefined`、無完成通知(派工所稱「實作在本庫」不成立,本庫只在 `e2e-setup.mjs:56` 呼叫;動工前先 `Grep` 函數所在套件),本庫借該套件未文件化之 `opt.tableAsync` 並在 `e2ePorts.mjs` 開測試專用注入點(`globalThis.__e2ePortsTableAsync`)取得事件;主控據此請套件補觀察點,m674b 起套件 1.0.60 之 `noteOwn` 回傳永不 reject 之 `Promise<{ ok, attempts, reason }>`、`opt.tableAsync` 為正式注入點、取樣失敗有界重試,本庫改用正式觀察點並**移除注入點、移除子行程自己之取樣與重試**.
+- **以正式選項注入、不改 e2ePorts.mjs**:同一行程內第二次呼叫 `reserveE2ePorts`(基準埠相同、無新增埠)沿用第一次之保留(`extendActive` 回同一 handle),故測試子行程於匯入 `e2ePorts.mjs` **之前**先以 `{ avoid, tableAsync, noteTries… }` 呼叫一次,其後 `e2ePorts.mjs` 之呼叫即取得帶該選項之保留;`reservation.noteOwn` 以子行程內外包一層(只印 `NOTE-CALLED`／`NOTED`,不改行為)取得 `await` 之結果.
+- **替身代替加壓**:以 `WM674_GATE`(標記檔閘門)＋正式選項 `opt.tableAsync` 之合成行程表(`WM674_TABLE=gated`)使 `noteOwn`「延遲完成」,同一替身、同一延遲(125 秒;須另設 `noteTimeoutMs` 大於延遲,否則單次取樣於 60 秒被套件判逾時而重試)只換等待寫法,修前寫法(輪詢＋120 秒時限)逾時、事件寫法綠,不需 CPU 壓力;重現訊息與 11-27 之滿載重現逐字相同.
+- **延遲須落在被驗之等待期間**:初版 PR-012d 先 `sleep` 再放行閘門再等待,「等待改回 1000 ms 輪詢」變異存活;改為放行計時器與等待並行、放行當下記否定斷言證據後才被殺.變異存活先查「延遲有沒有落在等待期間」,不是補斷言.
+- **「等事件」測試須另證防懸置上限有效**:閘門永不放行且把上限縮為 4000 ms,訊息須可辨為懸置(`逾 4000 ms 仍未見(懸置)`);上限 `NOTE_HANG_MS`＝182000＋120000 ms:套件預設最壞等待 `noteTries×noteTimeoutMs＋(noteTries-1)×noteRetryMs`＝3×60000＋2×1000,餘裕取 11-27 重現紀錄之逾時值 120000.m674 之 600000 ms 為無套件最壞值可依時之估計,已由此取代.
+- **成因仍未證實,但已可辨**:滿載時 120 秒仍未見記錄,可能是取樣慢,也可能是取樣失敗(1.0.59 於行程表 `null` 時不寫不重試);同一輪 PR-007、PR-012a、PR-012c 等同樣依賴 PowerShell 查詢之案各約 7~15 秒完成,略偏向失敗,但無法在不自起加壓下證實.現由套件有界重試(3 次、間隔 1 秒、單次 60 秒),測試端不再重試;PR-012b 之判定輔助 `assertNoted` 於 `ok:false` 時訊息帶 `reason`(`table-failed`／`table-timeout`＝系統忙碌,其餘為邏輯錯誤),日後再紅即可分辨.
+- **「`ok` 不檢」之變異須有只有它抓得到之案**:PR-012b／d 之 `ok` 斷言與「預約檔記有服務行程」斷言互為備援(`ok:true` 當且僅當已記入),拿掉 `ok` 斷言變異仍綠;須另設 PR-012e(`tableAsync` 立即 `cb(null)`＋`noteTries:1` 之確定性失敗:`ok:false`、`reason:'table-failed'`、`startServer` 不失敗、預約檔不記入,且 `A.throws(() => assertNoted(...))` 驗輔助對 `ok:false` 拋錯並帶 `reason`)才殺得掉.
+- **`npm i <套件>@<版> -D` 之副作用**:會把 `package.json` 補上檔尾換行(原檔無)、並把 `package-lock.json` 頂層 `version` 與 `package.json` 同步;前者可事後以 Write 還原為無換行,後者為 npm 自動行為(不改)。
+- 子行程碼以 template literal 內嵌於測試檔(`CHILD_CODE`):內不可有反引號與 `${`(除刻意內插之常數),行尾註解以 `//` 起而不併成同一行,Edit 後以 `node --check` 與跑單元測試驗(語法錯在子行程才現形,父行程等不到 `RESULT`).
+- Git Bash 呼叫主控工具時,Windows 路徑參數一律正斜線(反斜線被殼層吃掉,`decision-log.mjs` 報任務資料夾不存在).

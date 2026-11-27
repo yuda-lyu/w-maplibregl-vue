@@ -1,4 +1,4 @@
-// e2e 埠之單一定義與保留(排程第 309 項, 2026-11-05 wm309; 規格 C:/opensrcOper/dspec/e2e埠與多套件同跑.md E1～E8; 套件 w-package-tools-e2e >= 1.0.22 README §2.12; 規則帳本 R-E2E-PORT-01)
+// e2e 埠之單一定義與保留(排程第 309 項, 2026-11-05 wm309; 規格〈e2e 埠與多套件同跑〉(主控 dspec)E1～E8; 套件 w-package-tools-e2e >= 1.0.22 README §2.12; 規則帳本 R-E2E-PORT-01)
 //
 // 本模組為「基準埠」唯一定義處, 並於模組載入時呼叫一次 reserveE2ePorts(本實例全部基準埠)——須早於任何 resolveE2ePort:
 //   test/tools/e2e-setup.mjs 自本檔取得基準埠與保留(ES 模組先評估被匯入者, 故先於其本體之任何取埠)。本套件無逐檔 runner, 單元測試(unit-e2ePortReserve)亦自本檔取得。

@@ -1,4 +1,4 @@
-// 測試 e2e 單開之自動換埠與「不沿用、不下殺非本實例」(規則帳本 R-E2E-PORT-01; 排程第 309 項, 2026-11-05 wm309; 規格 C:/opensrcOper/dspec/e2e埠與多套件同跑.md E1～E8)
+// 測試 e2e 單開之自動換埠與「不沿用、不下殺非本實例」(規則帳本 R-E2E-PORT-01; 排程第 309 項, 2026-11-05 wm309; 規格〈e2e 埠與多套件同跑〉(主控 dspec)E1～E8)
 //
 // 受測: test/tools/e2ePorts.mjs(基準埠單一定義＋reserveE2ePorts)、test/tools/e2e-setup.mjs(PORT／baseUrl／startServer／describeListeners／judgeOwnDevServer)、test/ 下之下殺站點與寫死之埠。
 // 契約(R-E2E-PORT-01):
@@ -9,8 +9,11 @@
 //   4. [E4] judgeOwnDevServer 預設拒絕: 查不到、無人監聽、任一監聽者非本專案之 vue-cli-service 皆不沿用; 根路徑須接分隔字元(前綴相近之他專案不命中)。
 //   5. [E4] test/ 內之下殺站點全集固定(只殺自己 spawn 之子行程), 無依埠或依名稱下殺; 新增下殺站點即紅, 逼出逐處審查。
 //   6. 測試碼(e2e-／api-／tools)無寫死之 host:埠 網址(唯一例外 e2e-fileprotocol 之虛擬來源, 其埠須列入 OTHER_TEST_PORTS); 基準埠字面站點只在 e2ePorts.mjs; OTHER_TEST_PORTS 與實際寫死之埠一致。
+//   7. startServer 就緒後以 reservation.noteOwn(serverProc) 記下本實例之服務行程(背景取行程表; w-package-tools-e2e >= 1.0.60 之 noteOwn 回傳 Promise<{ ok, attempts, reason }>, 於涵蓋該行程之取樣寫入預約檔後解開, 永不 reject):
+//      測試之子行程印出該結果(NOTED), 父測試等該事件而非等時限(PR-012b); 並以套件之正式注入點 opt.tableAsync 人為延遲取樣(PR-012d)與使之失敗(PR-012e), 證明取樣再慢只是事件晚到、取樣失敗如實告知且不使 startServer 失敗(規則帳本 R19 要求 8)。
+//      PR-014 守護真實 e2e 實跑不改取樣(test/ 內只有 e2ePorts.mjs 呼叫 reserveE2ePorts, 且不帶 tableAsync／noteTries／noteRetryMs／noteTimeoutMs)。
 // 占用者為真實 http 監聽(同 node 預設之雙棧位址)或真實子行程; 期望一律由當下環境動態算出(他人占用者、本行程之 dev server 皆計入), 不用 skip 當常態(全套同一 mocha 行程內 e2e 之 dev server 可能正占著 8123)。
-// 跑法: node C:/opensrcOper/tools/quiet-run.mjs --name e2ePortReserve --lock -- npx mocha test/unit-e2ePortReserve.test.mjs --timeout 120000
+// 跑法: 經主控之安靜執行器(quiet-run, 加 --name e2ePortReserve --lock)執行 npx mocha test/unit-e2ePortReserve.test.mjs --timeout 180000
 import fs from 'fs'
 import net from 'net'
 import http from 'http'
@@ -34,15 +37,65 @@ const SETUP_URL = pathToFileURL(path.join(fdTest, 'tools', 'e2e-setup.mjs')).hre
 const PORTS_URL = pathToFileURL(path.join(fdTest, 'tools', 'e2ePorts.mjs')).href
 const SELF = path.basename(fileURLToPath(import.meta.url))
 const STEP = 100 //reserveE2ePorts 預設 portStep
+//noteOwn 結果事件(子行程 stdout 之 NOTED 行)之防懸置上限(只防懸置, 不表達規格; 真實計時器): 取套件之最壞等待加餘裕。
+//  w-package-tools-e2e >= 1.0.60 之 noteOwn 每輪最多 noteTries(預設 3)次嘗試、單次查詢上限 noteTimeoutMs(預設 60000 ms)、嘗試間隔 noteRetryMs(預設 1000 ms),
+//  最壞約 3×60000＋2×1000＝182000 ms 後必解開(永不 reject; 見該套件 README §2.12〈記錄完成之觀察點〉); 餘裕 120000 ms＝2026-11-27 全機 CPU 99% 時 PR-012b 舊時限之觀察值, 供子行程起動、檔案寫入與計時器於滿載下之延遲。
+//  取樣再慢或失敗只是事件晚到或 ok 為 false(訊息帶 reason), 不再以固定時限判定
+const NOTE_WORST_MS = 3 * 60000 + 2 * 1000
+const NOTE_HANG_MS = NOTE_WORST_MS + 120000
+//PR-012d 人為加給 noteOwn 之延遲(閘門於啟動後此毫秒數才放行, 與等待並行; 不是時限, 也不是同步手段): 須長於「把等待改回小時限之輪詢」之上限, 該變異才會逾時(變異證明用; 規則帳本 R19 要求 8)
+const NOTE_HOLD_MS = 3000
+//替身取樣(WM674_TABLE=gated)回傳之合成行程表之列: 以此辨識預約檔之記錄確由經套件寫入路徑之替身表而來(真實行程表之起始時間不可能是此值)
+const SYNTH_ROW = { startMs: 1700000000000, image: 'wm674-synth.exe' }
 
 //子行程: 匯入 e2e-setup(模組頂層即保留埠)後回報實際埠。
 //  WM309_MODE=info: 回報後結束; hold: 回報後續留(保留不釋放)至父行程寫入一行; start: 回報後等父行程寫入一行, 再呼叫 startServer 並回報結果(拋錯或成功沿用; 不會 spawn dev server: 不是拋錯就是沿用)。
 //  start 模式另可設 WM309_SPAWN(替身腳本路徑)與 WM309_LOG: startServer 改以該替身取代 vue-cli-service(opts.spawnFn; 替身印出 Compiled successfully 即就緒); WM309_VERIFY_MS 縮短身分確認之等待(僅否定案例用);
 //  WM309_HOLD_AFTER=1: 回報 START 後續留至父行程再寫入一行(讓父行程檢查預約檔等)。
+//  WM674_NOTE=1: 於 e2ePorts 之 reservation.noteOwn 外包一層(只觀察、不改行為): 呼叫時印 NOTE-CALLED(含傳入行程之 PID), 其回傳之 Promise 解開時印 NOTED(結果 { ok, attempts, reason }); 父行程以此事件判定 noteOwn 之完成。
+//  WM674_TABLE=gated|fail: 於匯入 e2ePorts 之前先以套件之正式選項 opt.tableAsync 呼叫 reserveE2ePorts(同一行程之後續呼叫沿用該保留, 故 e2ePorts 取得之 reservation 即此保留)。
+//    gated: 取樣於 WM674_GATE 標記檔出現後才以合成表(SYNTH_ROW)完成(人為延遲, 父行程建立該檔即放行; 以標記檔為事件閘門, 不以延時); fail: 取樣立即失敗(cb(null))且 noteTries=1(確定性失敗, 不等重試)。
+//  WM674_NOTE_TIMEOUT_MS: 覆寫 noteTimeoutMs(僅供一次性之長延遲對照實驗, 使單次取樣可等過延遲; 常駐案不設)。
 const CHILD_CODE = `
 import { spawn } from 'node:child_process'
+import fs from 'node:fs'
+if (process.env.WM674_TABLE) {
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    const { default: reserveE2ePorts } = await import('w-package-tools-e2e/src/reserveE2ePorts.mjs')
+    let opt = {
+        avoid: ${JSON.stringify(OTHER_TEST_PORTS)},
+        tableAsync: (cb) => {
+            if (process.env.WM674_TABLE === 'fail') {
+                cb(null)
+                return
+            }
+            ;(async () => {
+                while (!fs.existsSync(process.env.WM674_GATE)) {
+                    await sleep(20)
+                }
+                cb([{ pid: globalThis.__wm674ServerPid, ppid: process.pid, ...${JSON.stringify(SYNTH_ROW)} }])
+            })()
+        },
+    }
+    if (process.env.WM674_TABLE === 'fail') {
+        opt.noteTries = 1
+    }
+    if (process.env.WM674_NOTE_TIMEOUT_MS) {
+        opt.noteTimeoutMs = Number(process.env.WM674_NOTE_TIMEOUT_MS)
+    }
+    reserveE2ePorts([${JSON.stringify(FRONTEND_PORT)}], opt)
+}
 const m = await import(${JSON.stringify(SETUP_URL)})
 const p = await import(${JSON.stringify(PORTS_URL)})
+if (process.env.WM674_NOTE) {
+    const origNoteOwn = p.reservation.noteOwn
+    p.reservation.noteOwn = (child) => {
+        console.log('NOTE-CALLED ' + JSON.stringify({ pid: child && child.pid }))
+        let pr = origNoteOwn(child)
+        pr.then((r) => console.log('NOTED ' + JSON.stringify(r)))
+        return pr
+    }
+}
 console.log('RESULT ' + JSON.stringify({ source: p.reservation.source, offset: p.reservation.offset, ports: p.reservation.ports, env: process.env.E2E_PORT_OFFSET === undefined ? null : process.env.E2E_PORT_OFFSET, PORT: m.PORT, baseUrl: m.baseUrl }))
 const wait = () => new Promise((resolve) => process.stdin.once('data', resolve))
 if (process.env.WM309_MODE === 'hold') {
@@ -58,6 +111,12 @@ if (process.env.WM309_MODE === 'start') {
             let spawnFn = (port) => spawn(process.execPath, [process.env.WM309_SPAWN, String(port), process.env.WM309_LOG], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
             if (process.env.WM309_SPAWN_SHELL === '1') {
                 spawnFn = (port) => spawn('"' + process.execPath + '" "' + process.env.WM309_SPAWN + '" ' + port + ' "' + process.env.WM309_LOG + '"', { shell: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+            }
+            let spawnPlain = spawnFn
+            spawnFn = (port) => {
+                let cp = spawnPlain(port)
+                globalThis.__wm674ServerPid = cp.pid //WM674_TABLE=gated 之合成行程表以此為服務行程(本情境直接啟動, 其 PID 即替身 node 行程)
+                return cp
             }
             opts = { verifyMs: Number(process.env.WM309_VERIFY_MS) || undefined, spawnFn }
         }
@@ -160,8 +219,76 @@ let spawnChild = (mode, envExtra = {}) => {
     child.once('exit', () => {
         h.exited = true
     })
+    child.once('close', () => {
+        h.closed = true //stdio 已全部讀完(此後 stdout 不會再有資料)
+    })
     live.push(h)
     return h
+}
+
+//以事件等待子行程 stdout 出現符合 re 之行(stdout 'data'、子行程 'close' 事件驅動, 不輪詢): 取樣再慢只是事件晚到, 不依「某時限內有沒有」判定;
+//  子行程已結束(close)仍未見 → 立即失敗並附輸出; limitMs 只防懸置(真實計時器), 不表達規格。回傳 re 之比對結果
+let waitOut = (h, re, limitMs, what) => new Promise((resolve, reject) => {
+    let timer = null
+    let finish = (err, v) => {
+        clearTimeout(timer)
+        h.child.stdout.off('data', onData)
+        h.child.off('close', onClose)
+        if (err) {
+            reject(err)
+        }
+        else {
+            resolve(v)
+        }
+    }
+    let onData = () => {
+        let m = re.exec(h.out)
+        if (m) {
+            finish(null, m)
+        }
+    }
+    let onClose = () => {
+        let m = re.exec(h.out)
+        finish(m ? null : new Error(`子行程已結束仍未見: ${what}(stdout: ${h.out.slice(-400)} stderr: ${h.err.slice(-600)})`), m)
+    }
+    let m0 = re.exec(h.out)
+    if (m0) {
+        resolve(m0)
+        return
+    }
+    if (h.closed) {
+        onClose()
+        return
+    }
+    h.child.stdout.on('data', onData)
+    h.child.once('close', onClose)
+    timer = setTimeout(() => finish(new Error(`逾 ${limitMs} ms 仍未見(懸置): ${what}(stdout: ${h.out.slice(-400)} stderr: ${h.err.slice(-600)})`)), limitMs)
+})
+
+//預約檔 known 欄之記錄(讀不到或半份即視為無)
+let readKnown = (fpRes) => {
+    try {
+        let known = JSON.parse(fs.readFileSync(fpRes, 'utf8')).known
+        return Array.isArray(known) ? known : []
+    }
+    catch (err) {
+        return []
+    }
+}
+
+//noteOwn 結果之判定(PR-012b／d／e): 須已把服務行程記入預約檔; 失敗時訊息帶 reason, 不等到逾時才知道(table-failed／table-timeout＝行程表查詢失敗或逾時, 屬系統忙碌, 其餘屬邏輯錯誤)
+let assertNoted = (noted, what) => {
+    A.ok(noted.ok === true && noted.reason === 'recorded', `noteOwn 未把服務行程記入預約檔: ok=${noted.ok} reason=${noted.reason} attempts=${noted.attempts}(${what}; table-failed／table-timeout 為系統忙碌, 其餘為邏輯錯誤)`)
+}
+
+//子行程呼叫 reservation.noteOwn 時印出之 NOTE-CALLED 行之 PID; 須先於 START 行(startServer 放行時 noteOwn 已被呼叫), 否則回 null
+let calledPid = (h) => {
+    let i = h.out.indexOf('NOTE-CALLED ')
+    let j = h.out.indexOf('START ')
+    if (i < 0 || j < 0 || i > j) {
+        return null
+    }
+    return JSON.parse(/NOTE-CALLED (.*)/.exec(h.out)[1]).pid
 }
 
 //取子行程某行輸出之 JSON(RESULT／START)
@@ -489,22 +616,92 @@ describe('unit-e2ePortReserve', function() {
 
         it('PR-012b spawn 後埠上的監聽者確為本專案之 vue-cli-service → 放行, 並把本實例之服務行程記入預約檔(noteOwn); 結束時 stopServer 收掉自己 spawn 之行程', async function() {
             //spec 句: 服務就緒後記下本實例之行程, 供下次開跑依身分清除殘留(預約殘留回收); 離場只殺自己 spawn 的
+            //同步方式: w-package-tools-e2e >= 1.0.60 之 noteOwn 回傳 Promise<{ ok, attempts, reason }>, 於涵蓋該行程之取樣已寫入預約檔後解開(永不 reject; 取樣為套件預設之真實行程表查詢, 失敗時有界重試);
+            //  子行程於其解開時印 NOTED(見 CHILD_CODE 之 WM674_NOTE), 本案等該事件並斷言 ok 為 true 且 reason 為 recorded, 不輪詢預約檔、不以時限判定「夠不夠快」
+            //  (舊寫法以輪詢加 120 秒時限: 全機滿載時取樣逾時限即紅, 先後由 30 秒加大至 120 秒仍不足; 取樣再慢只是事件晚到, 見 PR-012d; 取樣失敗則 ok 為 false 且 reason 寫明原因, 見 PR-012e)
+            this.timeout(NOTE_HANG_MS + 120000)
             let fpLog = path.join(fdTmp, 'own-after-spawn.log')
-            let h = spawnChild('start', { WM309_SPAWN: path.join(fdTmp, 'vue-cli-service.mjs'), WM309_LOG: fpLog, WM309_HOLD_AFTER: '1' })
+            let h = spawnChild('start', { WM309_SPAWN: path.join(fdTmp, 'vue-cli-service.mjs'), WM309_LOG: fpLog, WM309_HOLD_AFTER: '1', WM674_NOTE: '1' })
             let r = await waitJson(h, 'RESULT')
             h.child.stdin.write('go\n')
             let s = await waitJson(h, 'START')
             A.equal(s.ok, true, `替身確為本專案之 vue-cli-service 時須放行(實得 ${JSON.stringify(s)})`)
             let pid = Number(/pid=(\d+)/.exec(fs.readFileSync(fpLog, 'utf8'))[1])
+            A.equal(calledPid(h), pid, 'startServer 放行時須已以本實例 spawn 之服務行程呼叫 noteOwn(NOTE-CALLED 先於 START 印出且 PID 相符; 少呼叫或傳錯行程時於此即紅, 不等懸置上限)')
             let fpRes = path.join(fdReg, `p${r.PORT}.json`)
-            await waitUntil(() => {
+            let m = await waitOut(h, /NOTED (.*)\r?\n/, NOTE_HANG_MS, 'noteOwn 之結果(NOTED)') //須含行尾: 取整行(分塊到達時不取半行)
+            let noted = JSON.parse(m[1])
+            assertNoted(noted, 'PR-012b 真實取樣')
+            //NOTED 於 noteOwn 之 Promise 解開時才印, 其時預約檔已寫入: 不必再等
+            A.ok(readKnown(fpRes).some((k) => k.pid === pid), `預約檔 ${fpRes} 之 known 須記有服務行程 PID ${pid}(取樣 ${noted.attempts} 次; known: ${JSON.stringify(readKnown(fpRes))})`)
+            await finishChild(h)
+            A.ok(await waitDead(pid), '結束時 stopServer 須收掉自己 spawn 之行程')
+        })
+
+        it('PR-012d noteOwn 延遲完成(以閘門人為延遲取樣之替身, 不需真負載): startServer 不等它、完成前預約檔無記錄, 放行後以完成事件為準記入服務行程, 與延遲長短無關', async function() {
+            //spec 句: 同 PR-012b(服務就緒後記下本實例之行程); 加: 取樣慢(全機滿載)只是完成晚到, 不使 startServer 阻塞或失敗, 記錄於完成後即在
+            //延遲以事件閘門決定(以套件之正式注入點 opt.tableAsync 於子行程注入; 父行程建立標記檔才放行取樣; 不起行程表查詢), 不依賴真實負載。放行前之否定斷言取自放行當下(閘門未開時取樣不可能完成, 負載不使其誤判)
+            //鑑別力: 把等待改回「小時限之輪詢」(例: waitUntil(known 有記錄, 1000 ms))者, 延遲 NOTE_HOLD_MS 落在等待期間而逾時; 不等事件而於啟動後立即讀預約檔者, 閘門未開而紅; 舊寫法之 120 秒時限以同一替身加 125 秒延遲重現(見規則帳本 R19 要求 8)
+            this.timeout(NOTE_HANG_MS + 120000)
+            let fpLog = path.join(fdTmp, 'own-delayed-note.log')
+            let fpGate = path.join(fdTmp, 'note-gate')
+            let h = spawnChild('start', { WM309_SPAWN: path.join(fdTmp, 'vue-cli-service.mjs'), WM309_LOG: fpLog, WM309_HOLD_AFTER: '1', WM674_NOTE: '1', WM674_TABLE: 'gated', WM674_GATE: fpGate })
+            let r = await waitJson(h, 'RESULT')
+            h.child.stdin.write('go\n')
+            let s = await waitJson(h, 'START')
+            A.equal(s.ok, true, `取樣尚未完成時 startServer 亦須放行(noteOwn 於背景, 不阻塞啟動; 實得 ${JSON.stringify(s)})`)
+            let pid = Number(/pid=(\d+)/.exec(fs.readFileSync(fpLog, 'utf8'))[1])
+            A.equal(calledPid(h), pid, 'startServer 放行時須已以本實例 spawn 之服務行程呼叫 noteOwn(NOTE-CALLED 先於 START 印出且 PID 相符)')
+            let fpRes = path.join(fdReg, `p${r.PORT}.json`)
+            A.ok(!h.out.includes('NOTED'), '閘門未放行, 取樣不得已完成')
+            //人為延遲: NOTE_HOLD_MS 後放行閘門, 與下方等待並行(延遲落在等待期間: 把等待改回小時限之輪詢者, 於此逾時)。放行當下記下「是否已完成／預約檔有無記錄」供事後斷言
+            //  (否定斷言之證據取自放行前一刻: 閘門未開, 取樣不可能完成, 負載只使放行更晚到, 不使其誤判)
+            let atRelease = null
+            let timer = setTimeout(() => {
+                atRelease = { noted: h.out.includes('NOTED'), known: readKnown(fpRes) }
                 try {
-                    return JSON.parse(fs.readFileSync(fpRes, 'utf8')).known.some((k) => k.pid === pid)
+                    fs.writeFileSync(fpGate, '') //放行
                 }
-                catch (err) {
-                    return false
-                }
-            }, 120000, `預約檔 ${fpRes} 之 known 記有服務行程 PID ${pid}`) //noteOwn 在背景以 PowerShell 取行程表: 機器負載高(全套＋他套件同跑)時可超過 30 秒(2026-11-05 全套中實測逾時一次); 以條件同步, 上限只防懸置
+                catch (err) { /* 測試已結束且暫存夾已清: 無須放行 */ }
+            }, NOTE_HOLD_MS)
+            let m
+            try {
+                m = await waitOut(h, /NOTED (.*)\r?\n/, NOTE_HANG_MS, 'noteOwn 之結果(NOTED)')
+            }
+            finally {
+                clearTimeout(timer)
+            }
+            A.ok(atRelease !== null, '完成事件不得早於放行')
+            A.equal(atRelease.noted, false, '放行前取樣不得已完成')
+            A.ok(!atRelease.known.some((k) => k.pid === pid), `放行前預約檔不得已有服務行程之記錄(known: ${JSON.stringify(atRelease.known)})`)
+            let noted = JSON.parse(m[1])
+            assertNoted(noted, 'PR-012d 人為延遲之替身取樣')
+            A.equal(noted.attempts, 1, '延遲(未逾 noteTimeoutMs)不得觸發重試')
+            //記錄須是經套件寫入路徑、取自替身表之那一列(startMs／image 為 SYNTH_ROW, 真實行程表不可能有此值)
+            A.deepEqual(readKnown(fpRes).filter((k) => k.pid === pid), [{ pid, ...SYNTH_ROW }])
+            await finishChild(h)
+            A.ok(await waitDead(pid), '結束時 stopServer 須收掉自己 spawn 之行程')
+        })
+
+        it('PR-012e noteOwn 取樣失敗(以正式注入點 opt.tableAsync 令取樣確定性失敗, noteTries=1): startServer 仍放行, 結果為 ok:false 且 reason 寫明原因, 預約檔不記入; 判定輔助對 ok:false 須拋錯並於訊息帶 reason', async function() {
+            //spec 句: 取樣失敗(行程表查不到)時如實告知而非靜默(套件 1.0.60 以前為不寫、不重試、不告知); 取樣失敗不使 startServer 失敗(記錄只供下次開跑之殘留回收); 失敗之原因須讓測試輸出可辨, 不等到逾時才知道
+            this.timeout(NOTE_HANG_MS + 120000)
+            let fpLog = path.join(fdTmp, 'own-failed-note.log')
+            let h = spawnChild('start', { WM309_SPAWN: path.join(fdTmp, 'vue-cli-service.mjs'), WM309_LOG: fpLog, WM309_HOLD_AFTER: '1', WM674_NOTE: '1', WM674_TABLE: 'fail' })
+            let r = await waitJson(h, 'RESULT')
+            h.child.stdin.write('go\n')
+            let s = await waitJson(h, 'START')
+            A.equal(s.ok, true, `取樣失敗時 startServer 亦須放行(實得 ${JSON.stringify(s)})`)
+            let pid = Number(/pid=(\d+)/.exec(fs.readFileSync(fpLog, 'utf8'))[1])
+            A.equal(calledPid(h), pid, 'startServer 放行時須已以本實例 spawn 之服務行程呼叫 noteOwn')
+            let fpRes = path.join(fdReg, `p${r.PORT}.json`)
+            let m = await waitOut(h, /NOTED (.*)\r?\n/, NOTE_HANG_MS, 'noteOwn 之結果(NOTED)')
+            let noted = JSON.parse(m[1])
+            A.deepEqual(noted, { ok: false, attempts: 1, reason: 'table-failed' })
+            //判定輔助須把 ok:false 判為失敗並於訊息帶 reason(使 PR-012b 於系統忙碌時以原因失敗, 而非逾時)
+            A.throws(() => assertNoted(noted, 'PR-012e'), (err) => err.message.includes('table-failed') && err.message.includes('ok=false'), 'assertNoted 對 ok:false 須拋錯並於訊息帶 reason')
+            //取樣失敗時預約檔一字不動: 不記入服務行程
+            A.ok(!readKnown(fpRes).some((k) => k.pid === pid), `取樣失敗時預約檔不得記有服務行程(known: ${JSON.stringify(readKnown(fpRes))})`)
             await finishChild(h)
             A.ok(await waitDead(pid), '結束時 stopServer 須收掉自己 spawn 之行程')
         })
@@ -693,6 +890,23 @@ describe('unit-e2ePortReserve', function() {
             let start = setup.slice(setup.indexOf('export async function startServer'), setup.indexOf('function spawnServer'))
             A.ok(/reservation\.source === 'auto'/.test(start) && /judgeOwnDevServer\(PORT\)/.test(start), 'startServer 沿用前須依保留來源與身分確認把關')
             A.ok(!/ping\(/.test(setup), '不得再有以 HTTP 請求探測的 ping(對他人之服務會留下請求)')
+        })
+
+        it('PR-014 真實 e2e 實跑不改取樣: test/ 內(本檔除外)只有 e2ePorts.mjs 呼叫 reserveE2ePorts, 且不帶 tableAsync／noteTries／noteRetryMs／noteTimeoutMs(一律用套件預設之取行程表與有界重試)', function() {
+            //spec 句: 預約殘留回收依 noteOwn 登錄之服務身分(R19 要求 5); e2e 實跑若以替身取代取樣或改其重試選項, 登錄即失真而殘留回收失效。單元測試之子行程自行以套件之正式選項注入(本檔之字串碼), 不經 test/ 內之任何檔
+            let sites = []
+            let bad = []
+            for (let fp of listTestFiles()) {
+                let code = stripComments(fs.readFileSync(fp, 'utf8'))
+                if (/\breserveE2ePorts\s*\(/.test(code)) {
+                    sites.push(rel(fp))
+                    if (/tableAsync|noteTries|noteRetryMs|noteTimeoutMs/.test(code)) {
+                        bad.push(rel(fp))
+                    }
+                }
+            }
+            A.deepEqual(sites, ['tools/e2ePorts.mjs'], '呼叫 reserveE2ePorts 之站點只可為 e2ePorts.mjs(其餘一律經其 reservation)')
+            A.deepEqual(bad, [], '呼叫 reserveE2ePorts 之檔不得帶 tableAsync／noteTries／noteRetryMs／noteTimeoutMs')
         })
     })
 })
